@@ -127,16 +127,39 @@ class _CompanionWidgetState extends State<CompanionWidget>
               animation: _tapAnim,
               builder: (context, child) {
                 final tapPop = Curves.easeOutCubic.transform(_tapAnim.value);
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SpeechBubble(text: state.speechText ?? ''),
-                    const SizedBox(height: 4),
-                    Transform.scale(
-                      scale: 1.0 + tapPop * 0.06,
-                      child: DetectiveByteCharacter(pose: pose),
-                    ),
-                  ],
+                // Stack, not Column: the speech bubble used to sit above
+                // Byte in a Column, so every time speechText toggled
+                // empty/non-empty the bubble's height jumped from 0 to
+                // ~70px and shoved Byte down/up with it — a real position
+                // jump that read as "shaking" on every line of dialogue.
+                // Anchoring Byte to the bottom and floating the bubble
+                // above it (Positioned, not laid out in flow) keeps Byte's
+                // position independent of whether a bubble is showing.
+                return SizedBox(
+                  width: AppConstants.companionWidth,
+                  height: AppConstants.companionHeight,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: AppConstants.companionHeight + 4,
+                        child: Center(
+                          child: SpeechBubble(text: state.speechText ?? ''),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Transform.scale(
+                          scale: 1.0 + tapPop * 0.06,
+                          child: DetectiveByteCharacter(pose: pose),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             ),

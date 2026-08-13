@@ -11,6 +11,14 @@ namespace {
 constexpr UINT kClickThroughTimerId = 1;
 constexpr UINT kClickThroughIntervalMs = 16;
 
+// Posted to unminimize + switch to overlay chrome on a fresh message-loop
+// iteration, rather than inline from WM_SIZE. Calling ShowWindow(SW_RESTORE)
+// synchronously from inside a WM_SIZE(SIZE_MINIMIZED) handler races the
+// still-in-progress minimize this message is part of — the outer minimize
+// wins and the window stays iconic despite the style change. Deferring via
+// PostMessage lets that transition finish first.
+constexpr UINT kDeferredUnminimizeMessage = WM_APP + 1;
+
 /// Window attribute that enables dark mode window decorations.
 ///
 /// Redefined in case the developer's machine has a Windows SDK older than
@@ -362,6 +370,13 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       break;
 
+    case kDeferredUnminimizeMessage:
+      if (!overlay_mode_) {
+        ShowWindow(hwnd, SW_RESTORE);
+        SwitchToOverlayChrome();
+      }
+      return 0;
+
     case WM_SYSCOMMAND:
       // Minimizing the decorated window would send it to the taskbar and
       // hide Byte entirely. Intercept it and switch to the floating overlay
@@ -384,6 +399,19 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
     }
     case WM_SIZE: {
+      // Fallback for the WM_SYSCOMMAND/SC_MINIMIZE interception above: some
+      // minimize triggers (clicking the window's taskbar button while it's
+      // already focused, some third-party window/taskbar tools) minimize
+      // the window directly without ever routing an interceptable
+      // WM_SYSCOMMAND through this WndProc. If the window actually reaches
+      // the minimized state anyway, undo it immediately and switch to
+      // overlay chrome — same end result, just reactive instead of
+      // pre-empted.
+      if (wparam == SIZE_MINIMIZED && !overlay_mode_) {
+        PostMessage(hwnd, kDeferredUnminimizeMessage, 0, 0);
+        return 0;
+      }
+
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {
         // Size and position the child window.

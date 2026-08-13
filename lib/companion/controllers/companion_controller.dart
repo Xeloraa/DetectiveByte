@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show Clipboard;
 
 import '../../core/constants/app_constants.dart';
 import '../../future/investigation/investigation_event.dart';
+import '../../services/desktop_overlay.dart';
 import '../../services/storage/local_storage_service.dart';
 import '../../services/video_lookup_service.dart';
 import '../animations/idle_animation_controller.dart';
@@ -97,6 +98,13 @@ class CompanionController extends ChangeNotifier {
     }
     notifyListeners();
     await _storage.saveEnabled(enabled);
+
+    // The on/off switch is "quit the desktop companion," not "hide Byte but
+    // keep the window running" — there's no product surface for a
+    // disabled-but-open state, so treat turning it off as a close request.
+    if (!enabled) {
+      await DesktopOverlay.closeApp();
+    }
   }
 
   Future<void> setIdleAnimationsEnabled(bool enabled) async {

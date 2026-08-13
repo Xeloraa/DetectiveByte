@@ -75,6 +75,20 @@ class DesktopOverlay {
     }
   }
 
+  /// Quits the app via the same path as clicking the window's close button
+  /// (WM_CLOSE), rather than exiting the process directly, so teardown
+  /// happens the same way either way.
+  static Future<void> closeApp() async {
+    if (!_isWindowsHost) return;
+    try {
+      await _channel.invokeMethod<void>('closeApp');
+    } on MissingPluginException {
+      // Host without the channel (tests / non-Windows embeds).
+    } on PlatformException {
+      // Ignore transient channel failures during teardown.
+    }
+  }
+
   /// Reports interactive regions in **physical** pixels (client coordinates).
   static Future<void> updateHitRegions(List<Rect> regions) async {
     if (!isOverlayMode || !_isWindowsHost) return;

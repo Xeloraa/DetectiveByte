@@ -125,6 +125,15 @@ void FlutterWindow::RegisterOverlayChannel() {
           result->Success();
           return;
         }
+        if (method == "closeApp") {
+          // Routes through the normal WM_CLOSE -> WM_DESTROY path (same as
+          // clicking the window's own close button) rather than exiting the
+          // process directly, so teardown (flutter_controller_ reset, etc.)
+          // happens the same way either way.
+          PostMessage(GetHandle(), WM_CLOSE, 0, 0);
+          result->Success();
+          return;
+        }
         result->NotImplemented();
       });
 }
