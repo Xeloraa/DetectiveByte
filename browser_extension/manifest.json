@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Detective Byte — Video Investigator",
+  "version": "1.0.0",
+  "description": "Press play on a YouTube or TikTok video and Detective Byte, running on your desktop, starts investigating it.",
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.tiktok.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

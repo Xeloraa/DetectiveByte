@@ -134,6 +134,18 @@ class CompanionController extends ChangeNotifier {
     _startInvestigation();
   }
 
+  /// Called by the browser-extension bridge the instant the user presses
+  /// play on a YouTube/TikTok video — runs the same investigate flow as a
+  /// tap, but with the video's real URL already in hand instead of relying
+  /// on the clipboard. Always runs the full animation (not the "already
+  /// solved today" quick-reply) since a genuine video trigger deserves a
+  /// real look; mission/case counting still only happens once per day.
+  void investigateUrl(String url) {
+    if (!_state.isEnabled) return;
+    if (_state.phase == InvestigationPhase.analyzing) return;
+    _startInvestigation(explicitUrl: url);
+  }
+
   /// Today's mission is already solved — reply with a quick line instead of
   /// replaying the full investigate → Mission Completed cycle on every tap.
   void _showCasualDialogue() {
@@ -155,13 +167,15 @@ class CompanionController extends ChangeNotifier {
     });
   }
 
-  void _startInvestigation() {
+  void _startInvestigation({String? explicitUrl}) {
     _speechTimer?.cancel();
     _analyzeTimer?.cancel();
     _idleController.pause();
 
-    final dialogue = AppConstants.tapDialogue[
-        _random.nextInt(AppConstants.tapDialogue.length)];
+    final dialogue = explicitUrl != null
+        ? AppConstants.welcomeSpeech
+        : AppConstants.tapDialogue[
+            _random.nextInt(AppConstants.tapDialogue.length)];
 
     _state = _state.copyWith(
       isTapped: true,
@@ -173,9 +187,12 @@ class CompanionController extends ChangeNotifier {
     );
     notifyListeners();
 
-    // Kick off the clipboard/oEmbed lookup in parallel with the greeting
-    // beat so real video info is ready by the time analyzing starts.
-    final videoLookup = _lookupClipboardVideo();
+    // Kick off the oEmbed lookup in parallel with the greeting beat so real
+    // video info is ready by the time analyzing starts. An explicit URL
+    // (from the browser extension) skips the clipboard read entirely.
+    final videoLookup = explicitUrl != null
+        ? VideoLookupService.lookup(explicitUrl)
+        : _lookupClipboardVideo();
 
     _speechTimer = Timer(const Duration(milliseconds: 900), () async {
       final video = await videoLookup;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'onboarding/onboarding_screen.dart';
 import 'screens/companion_screen.dart';
 import 'services/desktop_overlay.dart';
+import 'services/local_bridge_server.dart';
 import 'services/overlay_hit_region.dart';
 import 'services/storage/local_storage_service.dart';
 
@@ -28,6 +31,11 @@ Future<void> main(List<String> args) async {
   final storage = await LocalStorageService.create();
   final controller = CompanionController(storage: storage);
   final hasSeenOnboarding = storage.loadHasSeenOnboarding();
+
+  // Lets the companion browser extension hand off a video URL the instant
+  // playback starts, instead of requiring a clipboard copy first. No-op on
+  // web; silently skips if the port's already taken by another instance.
+  unawaited(LocalBridgeServer(controller).start());
 
   runApp(
     DetectiveByteApp(
