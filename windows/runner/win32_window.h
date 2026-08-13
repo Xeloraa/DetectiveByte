@@ -57,13 +57,13 @@ class Win32Window {
   RECT GetClientArea();
 
   // When true (pass --overlay), the window becomes borderless, layered,
-  // always-on-top, and uses hit-test regions for click-through. Default false
-  // keeps a normal decorated window for `flutter run` development.
+  // always-on-top, and click-through outside the registered hit regions.
+  // Default false keeps a normal decorated window for `flutter run` dev.
   void SetOverlayMode(bool enabled);
   bool IsOverlayMode() const { return overlay_mode_; }
 
-  // Physical-pixel client rectangles that should receive mouse input.
-  // Everywhere else returns HTTRANSPARENT (click-through) in overlay mode.
+  // Physical-pixel client rectangles that should receive mouse input in
+  // overlay mode. Everywhere else is click-through to whatever's beneath.
   void SetHitTestRegions(std::vector<RECT> regions);
 
  protected:
@@ -82,18 +82,10 @@ class Win32Window {
   // Called when Destroy is called.
   virtual void OnDestroy();
 
-  // Shared hit-test used by the top-level window and Flutter view subclass.
-  LRESULT HitTestOverlay(HWND hwnd, LPARAM lparam) const;
-
   HWND child_content_ = nullptr;
 
  private:
   friend class WindowClassRegistrar;
-  friend LRESULT CALLBACK FlutterViewSubclassProc(HWND hwnd, UINT message,
-                                                  WPARAM wparam,
-                                                  LPARAM lparam,
-                                                  UINT_PTR subclass_id,
-                                                  DWORD_PTR ref_data);
 
   // OS callback called by message pump. Handles the WM_NCCREATE message which
   // is passed when the non-client area is being created and enables automatic
@@ -114,14 +106,16 @@ class Win32Window {
   // Apply borderless / layered / topmost chrome and cover the work area.
   void ApplyOverlayChrome();
 
-  // Subclass the Flutter child HWND so WM_NCHITTEST can click through.
-  // Uses the comctl32 SetWindowSubclass API (not raw SetWindowLongPtr) —
-  // that's the Microsoft-documented safe way to subclass a window you don't
-  // own; raw GWLP_WNDPROC replacement on the Flutter engine's own view HWND
-  // reliably crashed the process with STATUS_FATAL_APP_EXIT.
-  void SubclassFlutterView();
-  void UnsubclassFlutterView();
-  bool flutter_view_subclassed_ = false;
+  // Polls the cursor position (via GetCursorPos, which works regardless of
+  // whether this window is currently receiving messages) and toggles
+  // WS_EX_TRANSPARENT so the window is click-through everywhere except over
+  // a registered hit region. This replaces an earlier WM_NCHITTEST-based
+  // approach: per-message hit-testing on a child HWND you don't own is
+  // unreliable in practice (Flutter's view never reliably click-through'd),
+  // whereas toggling WS_EX_TRANSPARENT on the top-level window is the
+  // standard, OS-documented way real click-through overlays do this.
+  void UpdateClickThroughState();
+  bool point_is_in_hit_region_ = true;
 
   bool quit_on_close_ = false;
   bool overlay_mode_ = false;

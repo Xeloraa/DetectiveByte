@@ -13,7 +13,23 @@ import 'services/overlay_hit_region.dart';
 import 'services/storage/local_storage_service.dart';
 
 Future<void> main(List<String> args) async {
+  // Catches anything that slips past a widget's own error handling (a
+  // failed disk write, a bad network response, etc.) so it's logged instead
+  // of silently killing the isolate and leaving a blank, still-running
+  // window behind — which is what used to happen when the settings file
+  // failed to save on a full disk.
+  runZonedGuarded(() => _runApp(args), (error, stack) {
+    debugPrint('Unhandled error: $error\n$stack');
+  });
+}
+
+Future<void> _runApp(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('Flutter framework error: ${details.exception}');
+  };
 
   // Overlay mode: transparent floating pet over the real desktop.
   // Dev default stays a normal window. Enable with:

@@ -13,20 +13,32 @@ class FileStorageBackend implements StorageBackend {
   late final File _file;
   Map<String, dynamic> _cache = {};
 
-  Future<void> init() async {
-    final baseDir = _appDataDirectory();
-    final dir = Directory('$baseDir${Platform.pathSeparator}detective_byte');
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
+  /// True once a write has failed (e.g. disk full) — further persistence
+  /// attempts are skipped so the app keeps running in memory-only mode
+  /// instead of throwing on every subsequent save.
+  bool _persistenceDisabled = false;
 
-    _file = File('${dir.path}${Platform.pathSeparator}settings.json');
-    if (await _file.exists()) {
-      final contents = await _file.readAsString();
-      _cache = jsonDecode(contents) as Map<String, dynamic>? ?? {};
-    } else {
+  Future<void> init() async {
+    try {
+      final baseDir = _appDataDirectory();
+      final dir = Directory('$baseDir${Platform.pathSeparator}detective_byte');
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      _file = File('${dir.path}${Platform.pathSeparator}settings.json');
+      if (await _file.exists()) {
+        final contents = await _file.readAsString();
+        _cache = jsonDecode(contents) as Map<String, dynamic>? ?? {};
+      } else {
+        _cache = {};
+        await _persist();
+      }
+    } catch (_) {
+      // Filesystem unusable (e.g. disk full) — fall back to in-memory only
+      // so the app still starts instead of crashing before its first frame.
       _cache = {};
-      await _persist();
+      _persistenceDisabled = true;
     }
   }
 
@@ -47,7 +59,16 @@ class FileStorageBackend implements StorageBackend {
   }
 
   Future<void> _persist() async {
-    await _file.writeAsString(jsonEncode(_cache));
+    if (_persistenceDisabled) return;
+    try {
+      await _file.writeAsString(jsonEncode(_cache));
+    } catch (_) {
+      // Disk full or otherwise unwritable — keep running with the in-memory
+      // cache rather than letting an unhandled write failure take down the
+      // whole app (this used to throw and crash the isolate on every
+      // drag/tap/settings change once the disk filled up).
+      _persistenceDisabled = true;
+    }
   }
 
   @override

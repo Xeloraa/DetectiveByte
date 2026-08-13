@@ -1,15 +1,15 @@
 #include "win32_window.h"
 
-#include <commctrl.h>
 #include <dwmapi.h>
 #include <flutter_windows.h>
-#include <windowsx.h>
 
 #include "resource.h"
 
 namespace {
 
-constexpr UINT_PTR kFlutterViewSubclassId = 1;
+// Polling interval for UpdateClickThroughState(), ~60Hz.
+constexpr UINT kClickThroughTimerId = 1;
+constexpr UINT kClickThroughIntervalMs = 16;
 
 /// Window attribute that enables dark mode window decorations.
 ///
@@ -115,29 +115,6 @@ void WindowClassRegistrar::UnregisterWindowClass() {
   class_registered_ = false;
 }
 
-// Flutter's view is a child HWND that receives mouse hit-testing. Subclassed
-// via the comctl32 SetWindowSubclass API so overlay click-through works for
-// the painted companion/panels only. This is the Microsoft-documented safe
-// way to subclass a window you don't own — DefSubclassProc chains correctly
-// through any other subclasses instead of racing raw GWLP_WNDPROC swaps,
-// which is what caused a STATUS_FATAL_APP_EXIT crash here previously.
-LRESULT CALLBACK FlutterViewSubclassProc(HWND hwnd, UINT message,
-                                         WPARAM wparam, LPARAM lparam,
-                                         UINT_PTR subclass_id,
-                                         DWORD_PTR ref_data) {
-  auto* that = reinterpret_cast<Win32Window*>(ref_data);
-
-  if (that != nullptr && that->IsOverlayMode() && message == WM_NCHITTEST) {
-    return that->HitTestOverlay(hwnd, lparam);
-  }
-
-  if (message == WM_NCDESTROY) {
-    RemoveWindowSubclass(hwnd, FlutterViewSubclassProc, subclass_id);
-  }
-
-  return DefSubclassProc(hwnd, message, wparam, lparam);
-}
-
 Win32Window::Win32Window() {
   ++g_active_window_count;
 }
@@ -156,18 +133,40 @@ void Win32Window::SetOverlayMode(bool enabled) {
 
 void Win32Window::SetHitTestRegions(std::vector<RECT> regions) {
   hit_test_regions_ = std::move(regions);
+  // A region may have just appeared/moved under a stationary cursor —
+  // re-check immediately rather than waiting for the next mouse move.
+  UpdateClickThroughState();
 }
 
-LRESULT Win32Window::HitTestOverlay(HWND hwnd, LPARAM lparam) const {
-  POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
-  ScreenToClient(hwnd, &pt);
+void Win32Window::UpdateClickThroughState() {
+  if (!window_handle_ || !overlay_mode_) {
+    return;
+  }
 
+  POINT cursor;
+  GetCursorPos(&cursor);
+  ScreenToClient(window_handle_, &cursor);
+
+  bool in_region = false;
   for (const RECT& region : hit_test_regions_) {
-    if (PtInRect(&region, pt)) {
-      return HTCLIENT;
+    if (PtInRect(&region, cursor)) {
+      in_region = true;
+      break;
     }
   }
-  return HTTRANSPARENT;
+
+  if (in_region == point_is_in_hit_region_) {
+    return;
+  }
+  point_is_in_hit_region_ = in_region;
+
+  LONG ex_style = GetWindowLong(window_handle_, GWL_EXSTYLE);
+  if (in_region) {
+    ex_style &= ~WS_EX_TRANSPARENT;
+  } else {
+    ex_style |= WS_EX_TRANSPARENT;
+  }
+  SetWindowLong(window_handle_, GWL_EXSTYLE, ex_style);
 }
 
 void Win32Window::ApplyOverlayChrome() {
@@ -217,24 +216,14 @@ void Win32Window::ApplyOverlayChrome() {
     SetWindowPos(window_handle_, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOACTIVATE);
   }
-}
 
-void Win32Window::SubclassFlutterView() {
-  if (!child_content_ || flutter_view_subclassed_) {
-    return;
-  }
-  flutter_view_subclassed_ = SetWindowSubclass(
-      child_content_, FlutterViewSubclassProc, kFlutterViewSubclassId,
-      reinterpret_cast<DWORD_PTR>(this));
-}
-
-void Win32Window::UnsubclassFlutterView() {
-  if (!child_content_ || !flutter_view_subclassed_) {
-    return;
-  }
-  RemoveWindowSubclass(child_content_, FlutterViewSubclassProc,
-                       kFlutterViewSubclassId);
-  flutter_view_subclassed_ = false;
+  // Cursor position is polled independently of window messages because,
+  // by design, this window stops receiving mouse messages entirely once
+  // WS_EX_TRANSPARENT is set — GetCursorPos still works in that state,
+  // which is exactly why polling (rather than reacting to WM_MOUSEMOVE)
+  // is the standard way to drive this toggle.
+  SetTimer(window_handle_, kClickThroughTimerId, kClickThroughIntervalMs,
+           nullptr);
 }
 
 bool Win32Window::Create(const std::wstring& title,
@@ -306,7 +295,9 @@ Win32Window::MessageHandler(HWND hwnd,
                             LPARAM const lparam) noexcept {
   switch (message) {
     case WM_DESTROY:
-      UnsubclassFlutterView();
+      if (overlay_mode_) {
+        KillTimer(hwnd, kClickThroughTimerId);
+      }
       window_handle_ = nullptr;
       Destroy();
       if (quit_on_close_) {
@@ -314,9 +305,10 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       return 0;
 
-    case WM_NCHITTEST:
-      if (overlay_mode_) {
-        return HitTestOverlay(hwnd, lparam);
+    case WM_TIMER:
+      if (overlay_mode_ && wparam == kClickThroughTimerId) {
+        UpdateClickThroughState();
+        return 0;
       }
       break;
 
@@ -358,7 +350,6 @@ Win32Window::MessageHandler(HWND hwnd,
 }
 
 void Win32Window::Destroy() {
-  UnsubclassFlutterView();
   OnDestroy();
 
   if (window_handle_) {
@@ -382,10 +373,6 @@ void Win32Window::SetChildContent(HWND content) {
 
   MoveWindow(content, frame.left, frame.top, frame.right - frame.left,
              frame.bottom - frame.top, true);
-
-  if (overlay_mode_) {
-    SubclassFlutterView();
-  }
 
   SetFocus(child_content_);
 }
