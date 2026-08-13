@@ -26,6 +26,7 @@ class BytePose {
     this.wink = 0.0,
     this.showQuestion = false,
     this.showLightbulb = false,
+    this.idleActionKind,
   });
 
   final double scale;
@@ -44,6 +45,14 @@ class BytePose {
   final double wink;
   final bool showQuestion;
   final bool showLightbulb;
+
+  /// Which idle action is driving this pose, if any. _poseToAsset() keys
+  /// off this directly rather than inferring the pose from continuous
+  /// fields like [hatAdjust] or [stretchAmount] — those oscillate through
+  /// zero mid-animation (sine-driven sway), and picking an asset from
+  /// "is this value near zero" caused the picked image to flicker between
+  /// the idle pose and the action pose every time the wave crossed zero.
+  final IdleAction? idleActionKind;
 
   factory BytePose.fromState({
     required bool isTapped,
@@ -80,6 +89,7 @@ class BytePose {
           handToBrow: 0.85,
           showQuestion: true,
           blinkAmount: blinkAmount,
+          idleActionKind: idleAction,
         ),
       IdleAction.readNotebook => BytePose(
           notebookOpen: math.max(0.55, t),
@@ -87,27 +97,32 @@ class BytePose {
           headTilt: 0.14,
           leanForward: 0.08,
           blinkAmount: blinkAmount,
+          idleActionKind: idleAction,
         ),
       IdleAction.thinking => BytePose(
           thinking: 1,
           headTilt: -0.06 + math.sin(t * math.pi * 2) * 0.04,
           showLightbulb: t > 0.2,
           blinkAmount: blinkAmount,
+          idleActionKind: idleAction,
         ),
       IdleAction.polishMagnifyingGlass => BytePose(
           magnifierRaise: 0.6,
           armAngle: math.sin(t * math.pi * 4) * 0.3,
           blinkAmount: blinkAmount,
+          idleActionKind: idleAction,
         ),
       IdleAction.adjustHat => BytePose(
           hatAdjust: math.sin(t * math.pi * 2) * 0.15,
           headTilt: math.sin(t * math.pi) * 0.08,
           blinkAmount: blinkAmount,
+          idleActionKind: idleAction,
         ),
       IdleAction.stretch => BytePose(
           stretchAmount: math.sin(t * math.pi) * 0.15,
           armAngle: math.sin(t * math.pi) * 0.4,
           blinkAmount: blinkAmount,
+          idleActionKind: idleAction,
         ),
       IdleAction.blink => BytePose(blinkAmount: 1.0),
       IdleAction.none => BytePose(blinkAmount: blinkAmount),
@@ -152,34 +167,27 @@ String _poseToAsset(BytePose pose) {
     return ByteAssets.investigating;
   }
 
-  // IdleAction.lookAround
-  if (pose.handToBrow > 0.3 || pose.showQuestion) {
-    return ByteAssets.lookAround;
-  }
-
-  // IdleAction.readNotebook
-  if (pose.notebookOpen > 0.05) {
-    return ByteAssets.readNotebook;
-  }
-
-  // IdleAction.thinking
-  if (pose.thinking > 0.3 || pose.showLightbulb) {
-    return ByteAssets.thinking;
-  }
-
-  // IdleAction.adjustHat
-  if (pose.hatAdjust.abs() > 0.01) {
-    return ByteAssets.adjustHat;
-  }
-
-  // IdleAction.stretch
-  if (pose.stretchAmount.abs() > 0.01) {
-    return ByteAssets.stretch;
-  }
-
-  // IdleAction.polishMagnifyingGlass (partial raise, not investigating)
-  if (pose.magnifierRaise > 0.4) {
-    return ByteAssets.polishGlass;
+  // Idle actions — keyed off the stable action identity, not continuous
+  // pose parameters. Those oscillate (sine-driven sway) and cross zero
+  // mid-animation, so picking an asset from "is this value non-zero" made
+  // the picked image flicker between poses every time the wave crossed 0.
+  switch (pose.idleActionKind) {
+    case IdleAction.lookAround:
+      return ByteAssets.lookAround;
+    case IdleAction.readNotebook:
+      return ByteAssets.readNotebook;
+    case IdleAction.thinking:
+      return ByteAssets.thinking;
+    case IdleAction.adjustHat:
+      return ByteAssets.adjustHat;
+    case IdleAction.stretch:
+      return ByteAssets.stretch;
+    case IdleAction.polishMagnifyingGlass:
+      return ByteAssets.polishGlass;
+    case IdleAction.blink:
+    case IdleAction.none:
+    case null:
+      break;
   }
 
   // IdleAction.blink (dedicated blink pose — no other activity flags)
