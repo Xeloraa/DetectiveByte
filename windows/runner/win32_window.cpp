@@ -199,10 +199,13 @@ void Win32Window::SwitchToOverlayChrome() {
   style |= WS_POPUP;
   SetWindowLong(window_handle_, GWL_STYLE, style);
 
-  // Layered + always on top. TOOLWINDOW keeps it out of the taskbar.
+  // Layered + always on top. Deliberately NOT adding WS_EX_TOOLWINDOW: an
+  // earlier version hid the taskbar button while floating, which removed
+  // the one obvious, standard way back to the full window if double-tapping
+  // Byte didn't register — clicking the taskbar icon should always work as
+  // a backup.
   LONG ex_style = GetWindowLong(window_handle_, GWL_EXSTYLE);
-  ex_style &= ~(WS_EX_APPWINDOW);
-  ex_style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
+  ex_style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_APPWINDOW;
   SetWindowLong(window_handle_, GWL_EXSTYLE, ex_style);
 
   // Per-pixel alpha via DWM frame extension (Flutter paints transparent).
@@ -300,7 +303,7 @@ bool Win32Window::Create(const std::wstring& title,
 
   DWORD style = overlay_mode_ ? WS_POPUP : WS_OVERLAPPEDWINDOW;
   DWORD ex_style = overlay_mode_
-                       ? (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
+                       ? (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_APPWINDOW)
                        : 0;
 
   HWND window = CreateWindowEx(
