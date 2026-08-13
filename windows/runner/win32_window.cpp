@@ -1,5 +1,6 @@
 #include "win32_window.h"
 
+#include <commctrl.h>
 #include <dwmapi.h>
 #include <flutter_windows.h>
 #include <windowsx.h>
@@ -7,6 +8,8 @@
 #include "resource.h"
 
 namespace {
+
+constexpr UINT_PTR kFlutterViewSubclassId = 1;
 
 /// Window attribute that enables dark mode window decorations.
 ///
@@ -112,24 +115,27 @@ void WindowClassRegistrar::UnregisterWindowClass() {
   class_registered_ = false;
 }
 
-// Flutter's view is a child HWND that receives mouse hit-testing. Subclass it
-// so overlay click-through works for the painted companion/panels only.
-LRESULT CALLBACK FlutterViewWndProc(HWND window, UINT message, WPARAM wparam,
-                                    LPARAM lparam) {
-  auto* that = Win32Window::GetThisFromHandle(GetParent(window));
-  if (that == nullptr) {
-    that = reinterpret_cast<Win32Window*>(GetWindowLongPtr(window, GWLP_USERDATA));
-  }
+// Flutter's view is a child HWND that receives mouse hit-testing. Subclassed
+// via the comctl32 SetWindowSubclass API so overlay click-through works for
+// the painted companion/panels only. This is the Microsoft-documented safe
+// way to subclass a window you don't own — DefSubclassProc chains correctly
+// through any other subclasses instead of racing raw GWLP_WNDPROC swaps,
+// which is what caused a STATUS_FATAL_APP_EXIT crash here previously.
+LRESULT CALLBACK FlutterViewSubclassProc(HWND hwnd, UINT message,
+                                         WPARAM wparam, LPARAM lparam,
+                                         UINT_PTR subclass_id,
+                                         DWORD_PTR ref_data) {
+  auto* that = reinterpret_cast<Win32Window*>(ref_data);
 
   if (that != nullptr && that->IsOverlayMode() && message == WM_NCHITTEST) {
-    return that->HitTestOverlay(window, lparam);
+    return that->HitTestOverlay(hwnd, lparam);
   }
 
-  WNDPROC prev = that != nullptr ? that->flutter_view_prev_proc_ : nullptr;
-  if (prev != nullptr) {
-    return CallWindowProc(prev, window, message, wparam, lparam);
+  if (message == WM_NCDESTROY) {
+    RemoveWindowSubclass(hwnd, FlutterViewSubclassProc, subclass_id);
   }
-  return DefWindowProc(window, message, wparam, lparam);
+
+  return DefSubclassProc(hwnd, message, wparam, lparam);
 }
 
 Win32Window::Win32Window() {
@@ -190,7 +196,14 @@ void Win32Window::ApplyOverlayChrome() {
   // comes from Flutter/DWM composition. Color-key is avoided (breaks Flutter).
   SetLayeredWindowAttributes(window_handle_, 0, 255, LWA_ALPHA);
 
-  // Cover the primary monitor work area (physical pixels).
+  // Cover the primary monitor work area (physical pixels). Deliberately NOT
+  // passing SWP_SHOWWINDOW here: this runs before the Flutter engine's D3D
+  // surface exists (OnCreate() hasn't run yet), and compositing a layered +
+  // DWM-frame-extended window against a surface that isn't ready is what was
+  // causing an immediate STATUS_FATAL_APP_EXIT crash. The window stays
+  // positioned-but-hidden; the existing SetNextFrameCallback -> Show() path
+  // in FlutterWindow::OnCreate() reveals it once Flutter has painted, same
+  // as normal (non-overlay) mode already does.
   HMONITOR monitor =
       MonitorFromWindow(window_handle_, MONITOR_DEFAULTTONEAREST);
   MONITORINFO monitor_info = {};
@@ -199,32 +212,29 @@ void Win32Window::ApplyOverlayChrome() {
     const RECT& work = monitor_info.rcWork;
     SetWindowPos(window_handle_, HWND_TOPMOST, work.left, work.top,
                  work.right - work.left, work.bottom - work.top,
-                 SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                 SWP_FRAMECHANGED | SWP_NOACTIVATE);
   } else {
     SetWindowPos(window_handle_, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOACTIVATE);
   }
 }
 
 void Win32Window::SubclassFlutterView() {
-  if (!child_content_ || flutter_view_prev_proc_ != nullptr) {
+  if (!child_content_ || flutter_view_subclassed_) {
     return;
   }
-  // Stash |this| on the child so the subclass proc can find us if needed.
-  SetWindowLongPtr(child_content_, GWLP_USERDATA,
-                   reinterpret_cast<LONG_PTR>(this));
-  flutter_view_prev_proc_ = reinterpret_cast<WNDPROC>(SetWindowLongPtr(
-      child_content_, GWLP_WNDPROC,
-      reinterpret_cast<LONG_PTR>(FlutterViewWndProc)));
+  flutter_view_subclassed_ = SetWindowSubclass(
+      child_content_, FlutterViewSubclassProc, kFlutterViewSubclassId,
+      reinterpret_cast<DWORD_PTR>(this));
 }
 
 void Win32Window::UnsubclassFlutterView() {
-  if (!child_content_ || flutter_view_prev_proc_ == nullptr) {
+  if (!child_content_ || !flutter_view_subclassed_) {
     return;
   }
-  SetWindowLongPtr(child_content_, GWLP_WNDPROC,
-                   reinterpret_cast<LONG_PTR>(flutter_view_prev_proc_));
-  flutter_view_prev_proc_ = nullptr;
+  RemoveWindowSubclass(child_content_, FlutterViewSubclassProc,
+                       kFlutterViewSubclassId);
+  flutter_view_subclassed_ = false;
 }
 
 bool Win32Window::Create(const std::wstring& title,

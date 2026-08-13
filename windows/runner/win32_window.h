@@ -89,8 +89,11 @@ class Win32Window {
 
  private:
   friend class WindowClassRegistrar;
-  friend LRESULT CALLBACK FlutterViewWndProc(HWND window, UINT message,
-                                             WPARAM wparam, LPARAM lparam);
+  friend LRESULT CALLBACK FlutterViewSubclassProc(HWND hwnd, UINT message,
+                                                  WPARAM wparam,
+                                                  LPARAM lparam,
+                                                  UINT_PTR subclass_id,
+                                                  DWORD_PTR ref_data);
 
   // OS callback called by message pump. Handles the WM_NCCREATE message which
   // is passed when the non-client area is being created and enables automatic
@@ -112,8 +115,13 @@ class Win32Window {
   void ApplyOverlayChrome();
 
   // Subclass the Flutter child HWND so WM_NCHITTEST can click through.
+  // Uses the comctl32 SetWindowSubclass API (not raw SetWindowLongPtr) —
+  // that's the Microsoft-documented safe way to subclass a window you don't
+  // own; raw GWLP_WNDPROC replacement on the Flutter engine's own view HWND
+  // reliably crashed the process with STATUS_FATAL_APP_EXIT.
   void SubclassFlutterView();
   void UnsubclassFlutterView();
+  bool flutter_view_subclassed_ = false;
 
   bool quit_on_close_ = false;
   bool overlay_mode_ = false;
@@ -122,7 +130,6 @@ class Win32Window {
   HWND window_handle_ = nullptr;
 
   std::vector<RECT> hit_test_regions_;
-  WNDPROC flutter_view_prev_proc_ = nullptr;
 };
 
 #endif  // RUNNER_WIN32_WINDOW_H_

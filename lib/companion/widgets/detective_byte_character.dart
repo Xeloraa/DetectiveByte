@@ -191,7 +191,11 @@ String _poseToAsset(BytePose pose) {
 }
 
 /// Image-asset Detective Byte — pose-driven sprites with crossfade.
-class DetectiveByteCharacter extends StatelessWidget {
+///
+/// Poses are static PNGs, so without help they'd sit frozen for the full
+/// 2.4s of each idle action. A continuous "breathing" bob/scale runs
+/// underneath every pose so Byte never looks like a paused video.
+class DetectiveByteCharacter extends StatefulWidget {
   const DetectiveByteCharacter({
     super.key,
     required this.pose,
@@ -200,20 +204,57 @@ class DetectiveByteCharacter extends StatelessWidget {
   final BytePose pose;
 
   @override
-  Widget build(BuildContext context) {
-    final asset = _poseToAsset(pose);
+  State<DetectiveByteCharacter> createState() =>
+      _DetectiveByteCharacterState();
+}
 
-    return Transform.scale(
-      scale: pose.scale,
+class _DetectiveByteCharacterState extends State<DetectiveByteCharacter>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _breathe = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2800),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _breathe.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = _poseToAsset(widget.pose);
+
+    return AnimatedBuilder(
+      animation: _breathe,
+      builder: (context, child) {
+        final wave = Curves.easeInOut.transform(_breathe.value);
+        final bobY = -wave * 3.0;
+        final breatheScale = 1.0 + wave * 0.012;
+
+        return Transform.translate(
+          offset: Offset(0, bobY),
+          child: Transform.scale(
+            scale: widget.pose.scale * breatheScale,
+            child: child,
+          ),
+        );
+      },
       child: SizedBox(
         width: AppConstants.companionWidth,
         height: AppConstants.companionHeight,
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeIn,
+          duration: const Duration(milliseconds: 320),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
           transitionBuilder: (child, animation) {
-            return FadeTransition(opacity: animation, child: child);
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.96, end: 1.0).animate(animation),
+                child: child,
+              ),
+            );
           },
           child: _BytePoseImage(
             key: ValueKey<String>(asset),

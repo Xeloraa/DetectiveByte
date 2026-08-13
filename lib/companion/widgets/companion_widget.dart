@@ -119,12 +119,16 @@ class _CompanionWidgetState extends State<CompanionWidget>
             child: AnimatedBuilder(
               animation: _tapAnim,
               builder: (context, child) {
+                final tapPop = Curves.easeOutCubic.transform(_tapAnim.value);
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SpeechBubble(text: state.speechText ?? ''),
                     const SizedBox(height: 4),
-                    DetectiveByteCharacter(pose: pose),
+                    Transform.scale(
+                      scale: 1.0 + tapPop * 0.06,
+                      child: DetectiveByteCharacter(pose: pose),
+                    ),
                   ],
                 );
               },
