@@ -3,9 +3,13 @@ import 'package:flutter/services.dart';
 
 /// Windows desktop-pet overlay bridge.
 ///
-/// Overlay mode is gated by the native `--overlay` flag
-/// (`flutter run -d windows -- --overlay`). Without it, the app runs in a
-/// normal decorated window for development.
+/// The native host owns exactly one window that switches chrome at runtime:
+/// a normal decorated window (full app UI) by default, and a borderless /
+/// transparent / click-through overlay (Byte only) while minimized. This
+/// class mirrors that current mode reactively via [modeNotifier] — native
+/// pushes a "chromeModeChanged" call whenever the user minimizes/restores,
+/// so Dart can swap its UI without a restart. The `--overlay` launch flag
+/// still exists for dev testing the overlay chrome standalone.
 class DesktopOverlay {
   DesktopOverlay._();
 
@@ -13,17 +17,21 @@ class DesktopOverlay {
       MethodChannel('detective_byte/desktop_overlay');
 
   static bool _resolved = false;
-  static bool _overlayMode = false;
+
+  /// True when the Win32 host is currently borderless / transparent /
+  /// always-on-top. Updates live as the window is minimized/restored.
+  static final ValueNotifier<bool> modeNotifier = ValueNotifier<bool>(false);
+
+  static bool get isOverlayMode => modeNotifier.value;
 
   static bool get _isWindowsHost =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
-  /// True when the Win32 host is borderless / transparent / always-on-top.
-  static bool get isOverlayMode => _overlayMode;
-
-  /// Resolves overlay mode from dart entrypoint args and (on Windows) the host.
+  /// Resolves overlay mode from dart entrypoint args and (on Windows) the
+  /// host, then wires up live updates from native. Call once at startup.
   static Future<bool> resolve(List<String> args) async {
-    if (_resolved) return _overlayMode;
+    if (_resolved) return modeNotifier.value;
+    _resolved = true;
 
     final fromArgs = args.contains('--overlay');
     final fromEnv =
@@ -31,6 +39,7 @@ class DesktopOverlay {
 
     var native = false;
     if (_isWindowsHost) {
+      _channel.setMethodCallHandler(_handleNativeCall);
       try {
         final result = await _channel.invokeMethod<bool>('isOverlayMode');
         native = result ?? false;
@@ -41,14 +50,34 @@ class DesktopOverlay {
       }
     }
 
-    _overlayMode = native || fromArgs || fromEnv;
-    _resolved = true;
-    return _overlayMode;
+    modeNotifier.value = native || fromArgs || fromEnv;
+    return modeNotifier.value;
+  }
+
+  static Future<dynamic> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'chromeModeChanged') {
+      modeNotifier.value = call.arguments as bool? ?? modeNotifier.value;
+    }
+  }
+
+  /// Asks the native host to switch back to the normal decorated window —
+  /// e.g. after the user double-taps Byte while it's floating minimized.
+  /// No-op if there's no normal window to restore to (a standalone
+  /// `--overlay`-launched process).
+  static Future<void> restoreNormalWindow() async {
+    if (!_isWindowsHost) return;
+    try {
+      await _channel.invokeMethod<void>('restoreNormalWindow');
+    } on MissingPluginException {
+      // Host without the channel (tests / non-Windows embeds).
+    } on PlatformException {
+      // Ignore transient channel failures during teardown.
+    }
   }
 
   /// Reports interactive regions in **physical** pixels (client coordinates).
   static Future<void> updateHitRegions(List<Rect> regions) async {
-    if (!_overlayMode || !_isWindowsHost) return;
+    if (!isOverlayMode || !_isWindowsHost) return;
 
     final payload = regions
         .where((r) => r.width > 0 && r.height > 0)

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../services/desktop_overlay.dart';
 import '../../services/overlay_hit_region.dart';
 import '../controllers/companion_controller.dart';
 import '../models/companion_position.dart';
@@ -88,6 +89,12 @@ class _CompanionWidgetState extends State<CompanionWidget>
           opacity: state.transparency,
           child: GestureDetector(
             onTap: widget.controller.onTap,
+            // Byte floats alone (no chrome, no window controls) while
+            // minimized to the overlay — double-tap is the way back to the
+            // full app window.
+            onDoubleTap: widget.reportOverlayHits
+                ? DesktopOverlay.restoreNormalWindow
+                : null,
             onPanUpdate: (details) {
               setState(() {
                 final current = _dragOffset ?? baseOffset;

@@ -120,8 +120,25 @@ void FlutterWindow::RegisterOverlayChannel() {
           result->Success();
           return;
         }
+        if (method == "restoreNormalWindow") {
+          SwitchToNormalChrome();
+          result->Success();
+          return;
+        }
         result->NotImplemented();
       });
+}
+
+void FlutterWindow::OnChromeModeChanged(bool is_overlay) {
+  if (!overlay_channel_) {
+    // Fires during the initial Create() chrome application too, before the
+    // engine/channel exist yet — Dart picks up that initial state itself via
+    // the "isOverlayMode" query once it starts, so this is a safe no-op.
+    return;
+  }
+  overlay_channel_->InvokeMethod(
+      "chromeModeChanged",
+      std::make_unique<flutter::EncodableValue>(is_overlay));
 }
 
 void FlutterWindow::OnDestroy() {

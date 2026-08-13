@@ -171,6 +171,13 @@ String _poseToAsset(BytePose pose) {
   // pose parameters. Those oscillate (sine-driven sway) and cross zero
   // mid-animation, so picking an asset from "is this value non-zero" made
   // the picked image flicker between poses every time the wave crossed 0.
+  //
+  // Deliberately excludes blink here — blink is applied separately in
+  // _DetectiveByteCharacterState as an un-animated overlay swap, not a
+  // pose change. Blinks last 120ms, far shorter than AnimatedSwitcher's
+  // 320ms crossfade, so routing blink through this function (and the
+  // switcher) reversed an in-flight scale/fade transition on every single
+  // blink — a visible jolt every 2.5-7.5s that read as Byte "shaking".
   switch (pose.idleActionKind) {
     case IdleAction.lookAround:
       return ByteAssets.lookAround;
@@ -187,15 +194,8 @@ String _poseToAsset(BytePose pose) {
     case IdleAction.blink:
     case IdleAction.none:
     case null:
-      break;
+      return ByteAssets.idle;
   }
-
-  // IdleAction.blink (dedicated blink pose — no other activity flags)
-  if (pose.blinkAmount >= 0.85) {
-    return ByteAssets.blink;
-  }
-
-  return ByteAssets.idle;
 }
 
 /// Image-asset Detective Byte — pose-driven sprites with crossfade.
@@ -231,7 +231,12 @@ class _DetectiveByteCharacterState extends State<DetectiveByteCharacter>
 
   @override
   Widget build(BuildContext context) {
-    final asset = _poseToAsset(widget.pose);
+    final baseAsset = _poseToAsset(widget.pose);
+    // Blink is a same-key, un-animated swap (see _poseToAsset) so it never
+    // fights the pose-change crossfade below.
+    final isBlinking =
+        widget.pose.idleActionKind == null && widget.pose.blinkAmount >= 0.85;
+    final displayAsset = isBlinking ? ByteAssets.blink : baseAsset;
 
     return AnimatedBuilder(
       animation: _breathe,
@@ -265,8 +270,8 @@ class _DetectiveByteCharacterState extends State<DetectiveByteCharacter>
             );
           },
           child: _BytePoseImage(
-            key: ValueKey<String>(asset),
-            assetFileName: asset,
+            key: ValueKey<String>(baseAsset),
+            assetFileName: displayAsset,
           ),
         ),
       ),

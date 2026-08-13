@@ -56,11 +56,26 @@ class Win32Window {
   // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
 
-  // When true (pass --overlay), the window becomes borderless, layered,
-  // always-on-top, and click-through outside the registered hit regions.
-  // Default false keeps a normal decorated window for `flutter run` dev.
+  // When true (pass --overlay), the window *starts* borderless, layered,
+  // always-on-top, and click-through outside the registered hit regions,
+  // instead of the normal decorated window `flutter run` dev uses. Chrome
+  // also switches dynamically at runtime after creation — see
+  // SwitchToOverlayChrome/SwitchToNormalChrome — so this reflects the
+  // *current* chrome, not just how the window was launched.
   void SetOverlayMode(bool enabled);
   bool IsOverlayMode() const { return overlay_mode_; }
+
+  // Switches to borderless/transparent/click-through/topmost chrome,
+  // remembering the current window rect so SwitchToNormalChrome can put it
+  // back. Triggered when the user minimizes the normal window — Byte stays
+  // on screen instead of vanishing to the taskbar.
+  void SwitchToOverlayChrome();
+
+  // Reverses SwitchToOverlayChrome: restores the decorated window at its
+  // remembered rect. No-op if there's no normal chrome to return to (e.g. a
+  // window launched directly with --overlay).  Triggered by double-tapping
+  // Byte while it's floating.
+  void SwitchToNormalChrome();
 
   // Physical-pixel client rectangles that should receive mouse input in
   // overlay mode. Everywhere else is click-through to whatever's beneath.
@@ -81,6 +96,11 @@ class Win32Window {
 
   // Called when Destroy is called.
   virtual void OnDestroy();
+
+  // Called whenever chrome switches between normal and overlay at runtime
+  // (not on the initial launch-time chrome applied in Create()). Lets
+  // FlutterWindow forward the change to Dart over the platform channel.
+  virtual void OnChromeModeChanged(bool is_overlay) {}
 
   HWND child_content_ = nullptr;
 
@@ -103,9 +123,6 @@ class Win32Window {
   // Update the window frame's theme to match the system theme.
   static void UpdateTheme(HWND const window);
 
-  // Apply borderless / layered / topmost chrome and cover the work area.
-  void ApplyOverlayChrome();
-
   // Polls the cursor position (via GetCursorPos, which works regardless of
   // whether this window is currently receiving messages) and toggles
   // WS_EX_TRANSPARENT so the window is click-through everywhere except over
@@ -119,6 +136,12 @@ class Win32Window {
 
   bool quit_on_close_ = false;
   bool overlay_mode_ = false;
+
+  // Window rect (screen coordinates) to return to when leaving overlay
+  // chrome. Populated the first time SwitchToOverlayChrome() runs from
+  // normal chrome; SwitchToNormalChrome() is a no-op without it.
+  RECT normal_chrome_rect_ = {0, 0, 0, 0};
+  bool has_normal_chrome_rect_ = false;
 
   // window handle for top level window.
   HWND window_handle_ = nullptr;

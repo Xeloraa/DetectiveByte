@@ -127,7 +127,7 @@ Win32Window::~Win32Window() {
 void Win32Window::SetOverlayMode(bool enabled) {
   overlay_mode_ = enabled;
   if (window_handle_ && overlay_mode_) {
-    ApplyOverlayChrome();
+    SwitchToOverlayChrome();
   }
 }
 
@@ -169,10 +169,20 @@ void Win32Window::UpdateClickThroughState() {
   SetWindowLong(window_handle_, GWL_EXSTYLE, ex_style);
 }
 
-void Win32Window::ApplyOverlayChrome() {
+void Win32Window::SwitchToOverlayChrome() {
   if (!window_handle_) {
     return;
   }
+
+  // Remember where the decorated window was so SwitchToNormalChrome can put
+  // it back. Skipped when already in overlay chrome — in particular, this
+  // correctly leaves has_normal_chrome_rect_ false for a window launched
+  // directly with --overlay, since it never had a "normal" rect.
+  if (!overlay_mode_) {
+    GetWindowRect(window_handle_, &normal_chrome_rect_);
+    has_normal_chrome_rect_ = true;
+  }
+  overlay_mode_ = true;
 
   // Borderless popup.
   LONG style = GetWindowLong(window_handle_, GWL_STYLE);
@@ -196,13 +206,15 @@ void Win32Window::ApplyOverlayChrome() {
   SetLayeredWindowAttributes(window_handle_, 0, 255, LWA_ALPHA);
 
   // Cover the primary monitor work area (physical pixels). Deliberately NOT
-  // passing SWP_SHOWWINDOW here: this runs before the Flutter engine's D3D
-  // surface exists (OnCreate() hasn't run yet), and compositing a layered +
-  // DWM-frame-extended window against a surface that isn't ready is what was
-  // causing an immediate STATUS_FATAL_APP_EXIT crash. The window stays
-  // positioned-but-hidden; the existing SetNextFrameCallback -> Show() path
-  // in FlutterWindow::OnCreate() reveals it once Flutter has painted, same
-  // as normal (non-overlay) mode already does.
+  // passing SWP_SHOWWINDOW here. At initial creation time (called from
+  // Create(), before OnCreate() has run) the Flutter engine's D3D surface
+  // doesn't exist yet, and compositing a layered + DWM-frame-extended window
+  // against a surface that isn't ready caused an immediate
+  // STATUS_FATAL_APP_EXIT crash — the window stays positioned-but-hidden and
+  // the existing SetNextFrameCallback -> Show() path in
+  // FlutterWindow::OnCreate() reveals it once Flutter has painted. On a
+  // runtime switch (minimize) the window is already shown with a live
+  // surface, so this is a no-op with respect to visibility either way.
   HMONITOR monitor =
       MonitorFromWindow(window_handle_, MONITOR_DEFAULTTONEAREST);
   MONITORINFO monitor_info = {};
@@ -224,6 +236,44 @@ void Win32Window::ApplyOverlayChrome() {
   // is the standard way to drive this toggle.
   SetTimer(window_handle_, kClickThroughTimerId, kClickThroughIntervalMs,
            nullptr);
+
+  OnChromeModeChanged(true);
+}
+
+void Win32Window::SwitchToNormalChrome() {
+  // No normal rect to return to — either already normal, or this window
+  // was launched directly with --overlay and has no decorated state.
+  if (!window_handle_ || !overlay_mode_ || !has_normal_chrome_rect_) {
+    return;
+  }
+
+  KillTimer(window_handle_, kClickThroughTimerId);
+  point_is_in_hit_region_ = true;
+  hit_test_regions_.clear();
+
+  // Undo the DWM frame extension used for per-pixel alpha in overlay chrome.
+  MARGINS margins = {0, 0, 0, 0};
+  DwmExtendFrameIntoClientArea(window_handle_, &margins);
+
+  LONG style = GetWindowLong(window_handle_, GWL_STYLE);
+  style &= ~WS_POPUP;
+  style |= WS_OVERLAPPEDWINDOW;
+  SetWindowLong(window_handle_, GWL_STYLE, style);
+
+  LONG ex_style = GetWindowLong(window_handle_, GWL_EXSTYLE);
+  ex_style &= ~(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
+                WS_EX_TRANSPARENT);
+  SetWindowLong(window_handle_, GWL_EXSTYLE, ex_style);
+
+  overlay_mode_ = false;
+
+  const RECT& r = normal_chrome_rect_;
+  SetWindowPos(window_handle_, HWND_NOTOPMOST, r.left, r.top,
+               r.right - r.left, r.bottom - r.top,
+               SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+  SetForegroundWindow(window_handle_);
+
+  OnChromeModeChanged(false);
 }
 
 bool Win32Window::Create(const std::wstring& title,
@@ -256,7 +306,7 @@ bool Win32Window::Create(const std::wstring& title,
   }
 
   if (overlay_mode_) {
-    ApplyOverlayChrome();
+    SwitchToOverlayChrome();
   } else {
     UpdateTheme(window);
   }
@@ -308,6 +358,16 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_TIMER:
       if (overlay_mode_ && wparam == kClickThroughTimerId) {
         UpdateClickThroughState();
+        return 0;
+      }
+      break;
+
+    case WM_SYSCOMMAND:
+      // Minimizing the decorated window would send it to the taskbar and
+      // hide Byte entirely. Intercept it and switch to the floating overlay
+      // instead, so Byte stays visible; double-tapping Byte switches back.
+      if (!overlay_mode_ && (wparam & 0xFFF0) == SC_MINIMIZE) {
+        SwitchToOverlayChrome();
         return 0;
       }
       break;
