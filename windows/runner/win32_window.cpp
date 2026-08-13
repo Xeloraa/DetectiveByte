@@ -371,10 +371,17 @@ Win32Window::MessageHandler(HWND hwnd,
       break;
 
     case kDeferredUnminimizeMessage:
-      if (!overlay_mode_) {
-        ShowWindow(hwnd, SW_RESTORE);
-        SwitchToOverlayChrome();
-      }
+      // Unconditional: if the window ever actually reaches the iconic
+      // state, get it back regardless of what overlay_mode_ already says.
+      // It's possible for the WM_SYSCOMMAND interception below to have
+      // already flipped overlay_mode_ true while the OS still completes an
+      // actual minimize through a separate path afterward — guarding this
+      // on !overlay_mode_ meant that case left the window genuinely iconic
+      // with no taskbar icon (WS_EX_TOOLWINDOW) and nothing to bring it
+      // back. SwitchToOverlayChrome() is idempotent, so calling it again
+      // here is harmless.
+      ShowWindow(hwnd, SW_RESTORE);
+      SwitchToOverlayChrome();
       return 0;
 
     case WM_SYSCOMMAND:
@@ -407,7 +414,7 @@ Win32Window::MessageHandler(HWND hwnd,
       // the minimized state anyway, undo it immediately and switch to
       // overlay chrome — same end result, just reactive instead of
       // pre-empted.
-      if (wparam == SIZE_MINIMIZED && !overlay_mode_) {
+      if (wparam == SIZE_MINIMIZED) {
         PostMessage(hwnd, kDeferredUnminimizeMessage, 0, 0);
         return 0;
       }
