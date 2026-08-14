@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
+import '../../investigation/data/picture_case_bank.dart';
+import '../../investigation/widgets/picture_case_dialog.dart';
 import '../../services/overlay_hit_region.dart';
 import '../../settings/settings_sheet.dart';
 import '../controllers/companion_controller.dart';
@@ -32,13 +34,17 @@ class OverlayPanels extends StatelessWidget {
               _StatusCard(
                 enabled: state.isEnabled,
                 onToggle: controller.setEnabled,
-                onOpenSettings: () =>
-                    SettingsSheet.show(context, controller),
+                onOpenSettings: () => SettingsSheet.show(context, controller),
               ),
               const SizedBox(height: 10),
               _MissionCard(
                 progress: state.missionProgress,
                 target: state.missionTarget,
+                onTap: () => PictureCaseDialog.show(
+                  context,
+                  pictureCase: PictureCaseBank.caseForToday(),
+                  onSolved: controller.recordCaseSolved,
+                ),
               ),
               const SizedBox(height: 10),
               _JournalCard(casesSolved: state.casesSolved),
@@ -152,77 +158,85 @@ class _MissionCard extends StatelessWidget {
   const _MissionCard({
     required this.progress,
     required this.target,
+    required this.onTap,
   });
 
   final int progress;
   final int target;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ratio = target == 0 ? 0.0 : (progress / target).clamp(0.0, 1.0);
     final done = progress >= target;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      decoration: AppTheme.darkPanel,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  "Today's Mission",
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        decoration: AppTheme.darkPanel,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    "Today's Mission",
+                    style: TextStyle(
+                      color: AppTheme.panelText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$progress/$target',
                   style: TextStyle(
-                    color: AppTheme.panelText,
-                    fontSize: 13,
+                    color: done ? AppTheme.accentGreen : AppTheme.panelMuted,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-              Text(
-                '$progress/$target',
-                style: TextStyle(
-                  color: done ? AppTheme.accentGreen : AppTheme.panelMuted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            AppConstants.todaysMission,
-            style: const TextStyle(
-              color: AppTheme.panelMuted,
-              fontSize: 12,
-              height: 1.35,
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    value: ratio,
-                    minHeight: 7,
-                    backgroundColor: const Color(0xFF3A3A3A),
-                    color: AppTheme.accentGreen,
+            const SizedBox(height: 8),
+            Text(
+              AppConstants.todaysMission,
+              style: const TextStyle(
+                color: AppTheme.panelMuted,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      value: ratio,
+                      minHeight: 7,
+                      backgroundColor: const Color(0xFF3A3A3A),
+                      color: AppTheme.accentGreen,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Icon(
-                done ? Icons.card_giftcard_rounded : Icons.card_giftcard_outlined,
-                color: done ? AppTheme.accentGreen : AppTheme.panelMuted,
-                size: 20,
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 10),
+                Icon(
+                  done
+                      ? Icons.card_giftcard_rounded
+                      : Icons.card_giftcard_outlined,
+                  color: done ? AppTheme.accentGreen : AppTheme.panelMuted,
+                  size: 20,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

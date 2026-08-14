@@ -252,6 +252,27 @@ class CompanionController extends ChangeNotifier {
     });
   }
 
+  /// Records a picture-judgment case as solved — same counters the video
+  /// investigation flow feeds ("Today's Mission" / "Cases Solved"), but
+  /// without touching phase/speech, since the case dialog has its own
+  /// self-contained verdict/celebration screen.
+  Future<void> recordCaseSolved() async {
+    final alreadyDone = _state.missionComplete;
+    final newProgress = alreadyDone
+        ? _state.missionProgress
+        : (_state.missionProgress + 1).clamp(0, _state.missionTarget);
+    final newCases = _state.casesSolved + 1;
+
+    _state = _state.copyWith(
+      missionProgress: newProgress,
+      casesSolved: newCases,
+    );
+    notifyListeners();
+
+    await _storage.saveMissionProgress(newProgress);
+    await _storage.saveCasesSolved(newCases);
+  }
+
   Future<void> _completeMission() async {
     final alreadyDone = _state.missionComplete;
     final newProgress = alreadyDone
