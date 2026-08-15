@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -58,12 +60,55 @@ class _CompanionScreenState extends State<CompanionScreen> {
     setState(() => _dragHovering = false);
     if (details.files.isEmpty) return;
 
-    final bytes = await details.files.first.readAsBytes();
-    if (!mounted || bytes.isEmpty) return;
+    Uint8List? bytes;
+    try {
+      bytes = await details.files.first.readAsBytes();
+    } catch (_) {
+      bytes = null;
+    }
+    if (!mounted) return;
+
+    if (bytes == null || bytes.isEmpty) {
+      await _showDropFailedDialog();
+      return;
+    }
 
     widget.controller.onCaseFlowOpened();
     await LiveInvestigationDialog.show(context, imageBytes: bytes);
     if (mounted) widget.controller.onCaseFlowClosed();
+  }
+
+  Future<void> _showDropFailedDialog() {
+    // Some browsers hand image drags over in a format that doesn't resolve
+    // to real bytes (a page reference rather than the image itself) — this
+    // is the one failure _handleDrop can hit before there's anything to
+    // hand LiveInvestigationDialog, so it gets its own minimal dialog
+    // instead of silently doing nothing.
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.panel,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          "Couldn't grab that image",
+          style: TextStyle(color: AppTheme.panelText),
+        ),
+        content: const Text(
+          "That didn't come through as an image file — some browsers do "
+          "this. Try saving the image first (right-click it, Save Image "
+          "As), then drag the saved file onto Byte instead.",
+          style: TextStyle(color: AppTheme.panelMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
