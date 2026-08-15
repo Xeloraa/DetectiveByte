@@ -11,20 +11,23 @@ enum CaseVerdict {
   inconclusive;
 
   String get label => switch (this) {
-        CaseVerdict.real => 'Real',
-        CaseVerdict.fake => 'Fake / Misleading',
-        CaseVerdict.inconclusive => 'Not sure yet',
-      };
+    CaseVerdict.real => 'Real',
+    CaseVerdict.fake => 'Fake / Misleading',
+    CaseVerdict.inconclusive => 'Not sure yet',
+  };
 }
 
 /// One "is this real?" picture-judgment case: a viral-style photo + caption,
 /// a couple of clues that surface as the child investigates, and the ground
 /// truth revealed at the end.
 ///
-/// The "photo" is a styled placeholder (emoji + color), not a real bundled
-/// image — swap [placeholderEmoji]/[placeholderColor] for a real asset path
-/// once a curated image set exists; the investigation mechanic underneath
-/// doesn't change.
+/// By default the "photo" is a styled placeholder (emoji + color) — most
+/// cases can't safely use a real bundled image (real people, contested
+/// events, rights we don't hold). A case can opt into a real photo via
+/// [photoAsset] when one is genuinely safe to bundle (public-domain or
+/// clearly-licensed, no real person depicted) — [photoAttribution] is
+/// required whenever [photoAsset] is set, since that's the actual license
+/// term for image reuse, not just a nicety.
 class PictureCase {
   const PictureCase({
     required this.id,
@@ -36,7 +39,12 @@ class PictureCase {
     required this.clues,
     required this.verdictExplanation,
     required this.lessonLine,
-  });
+    this.photoAsset,
+    this.photoAttribution,
+  }) : assert(
+         photoAsset == null || photoAttribution != null,
+         'photoAttribution is required whenever photoAsset is set',
+       );
 
   final String id;
 
@@ -46,6 +54,13 @@ class PictureCase {
 
   final String placeholderEmoji;
   final Color placeholderColor;
+
+  /// Real bundled photo, shown instead of the placeholder when set.
+  final String? photoAsset;
+
+  /// e.g. "Photo: Etrhamjr, retouched by Hike395 — CC BY-SA 4.0". Shown as
+  /// a caption under the photo — required by the license, not decoration.
+  final String? photoAttribution;
 
   /// What "look closer" reveals right after the briefing — the first
   /// "wait, WHAT" moment (e.g. the photo is actually cropped tighter than

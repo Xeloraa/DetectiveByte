@@ -116,6 +116,10 @@ abstract final class PictureCaseBank {
           'volcano ⚡🌋"',
       placeholderEmoji: '⚡',
       placeholderColor: Color(0xFF6B4A9C),
+      photoAsset: 'assets/byte/cases/volcanic_lightning.jpg',
+      photoAttribution:
+          'Photo: Etrhamjr, retouched by Hike395 — CC BY-SA 4.0, '
+          'Wikimedia Commons',
       zoomOutReveal:
           'Looking closer, the ash cloud has real turbulence and texture — '
           'nothing about the lightning looks pasted on top.',

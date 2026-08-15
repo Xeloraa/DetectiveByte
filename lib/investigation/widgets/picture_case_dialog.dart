@@ -172,10 +172,7 @@ class _PictureCaseDialogState extends State<PictureCaseDialog> {
       case CaseStage.closed:
         return _controller.verdictWasCorrect
             ? const BytePose(scale: 1.05, thumbsUp: 1, wink: 1)
-            : const BytePose(
-                thinking: 1,
-                idleActionKind: IdleAction.thinking,
-              );
+            : const BytePose(thinking: 1, idleActionKind: IdleAction.thinking);
     }
   }
 
@@ -234,18 +231,43 @@ class _PhotoPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 160,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: pictureCase.placeholderColor.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(
-        pictureCase.placeholderEmoji,
-        style: const TextStyle(fontSize: 56),
-      ),
+    final asset = pictureCase.photoAsset;
+    if (asset == null) {
+      return Container(
+        width: double.infinity,
+        height: 160,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: pictureCase.placeholderColor.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          pictureCase.placeholderEmoji,
+          style: const TextStyle(fontSize: 56),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.asset(
+            asset,
+            width: double.infinity,
+            height: 160,
+            fit: BoxFit.cover,
+          ),
+        ),
+        if (pictureCase.photoAttribution != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            pictureCase.photoAttribution!,
+            style: const TextStyle(color: AppTheme.panelMuted, fontSize: 10),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -546,9 +568,9 @@ class _ClueReveal extends StatelessWidget {
         Text(
           clue.isStrongSignal
               ? "That's a strong clue — worth leaning on, but still not "
-                  'a final answer on its own.'
+                    'a final answer on its own.'
               : "That's just a hint — too thin to build a verdict on by "
-                  'itself.',
+                    'itself.',
           style: TextStyle(
             color: AppTheme.panelMuted.withValues(alpha: 0.8),
             fontSize: 12,
@@ -642,10 +664,7 @@ class _VerdictButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -680,7 +699,9 @@ class _CaseClosed extends StatelessWidget {
           decoration: BoxDecoration(
             color: verdictStyle.color.withValues(alpha: 0.16),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: verdictStyle.color.withValues(alpha: 0.7)),
+            border: Border.all(
+              color: verdictStyle.color.withValues(alpha: 0.7),
+            ),
           ),
           child: Row(
             children: [
@@ -798,22 +819,22 @@ class _VerdictStyle {
   final String banner;
 
   static _VerdictStyle of(CaseVerdict verdict) => switch (verdict) {
-        CaseVerdict.real => const _VerdictStyle._(
-            AppTheme.accentGreen,
-            Icons.verified_rounded,
-            'Checks out — REAL',
-          ),
-        CaseVerdict.fake => const _VerdictStyle._(
-            Color(0xFFE8756B),
-            Icons.report_gmailerrorred_rounded,
-            'FAKE / MISLEADING',
-          ),
-        CaseVerdict.inconclusive => const _VerdictStyle._(
-            AppTheme.amber,
-            Icons.help_rounded,
-            'INCONCLUSIVE — not enough evidence yet',
-          ),
-      };
+    CaseVerdict.real => const _VerdictStyle._(
+      AppTheme.accentGreen,
+      Icons.verified_rounded,
+      'Checks out — REAL',
+    ),
+    CaseVerdict.fake => const _VerdictStyle._(
+      Color(0xFFE8756B),
+      Icons.report_gmailerrorred_rounded,
+      'FAKE / MISLEADING',
+    ),
+    CaseVerdict.inconclusive => const _VerdictStyle._(
+      AppTheme.amber,
+      Icons.help_rounded,
+      'INCONCLUSIVE — not enough evidence yet',
+    ),
+  };
 }
 
 /// One row of the case-closed evidence recap: what was checked, what it
