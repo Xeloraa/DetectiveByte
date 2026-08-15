@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "native_drop_target.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -27,6 +28,7 @@ class FlutterWindow : public Win32Window {
 
  private:
   void RegisterOverlayChannel();
+  void RegisterDropTarget();
 
   // The project to run.
   flutter::DartProject project_;
@@ -36,6 +38,13 @@ class FlutterWindow : public Win32Window {
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       overlay_channel_;
+
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      drop_channel_;
+  // Raw, not owned via unique_ptr: COM lifetime (AddRef/Release) governs
+  // this, not C++ scope — RegisterDragDrop holds its own reference,
+  // RevokeDragDrop + Release() in OnDestroy release both.
+  NativeDropTarget* drop_target_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

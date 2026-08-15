@@ -9,6 +9,7 @@
 namespace {
 
 constexpr char kOverlayChannelName[] = "detective_byte/desktop_overlay";
+constexpr char kDropChannelName[] = "detective_byte/native_drop";
 
 std::vector<RECT> ParseHitRegions(const flutter::EncodableValue* arguments) {
   std::vector<RECT> regions;
@@ -79,6 +80,7 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   RegisterOverlayChannel();
+  RegisterDropTarget();
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -138,6 +140,26 @@ void FlutterWindow::RegisterOverlayChannel() {
       });
 }
 
+void FlutterWindow::RegisterDropTarget() {
+  if (!flutter_controller_ || !flutter_controller_->engine()) {
+    return;
+  }
+
+  drop_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), kDropChannelName,
+          &flutter::StandardMethodCodec::GetInstance());
+
+  // RegisterDragDrop requires OLE (not just plain COM) to be initialized —
+  // done once via OleInitialize in main.cpp's wWinMain, ahead of window
+  // creation.
+  drop_target_ = new NativeDropTarget(GetHandle(), drop_channel_.get());
+  if (FAILED(RegisterDragDrop(GetHandle(), drop_target_))) {
+    drop_target_->Release();
+    drop_target_ = nullptr;
+  }
+}
+
 void FlutterWindow::OnChromeModeChanged(bool is_overlay) {
   if (!overlay_channel_) {
     // Fires during the initial Create() chrome application too, before the
@@ -151,6 +173,13 @@ void FlutterWindow::OnChromeModeChanged(bool is_overlay) {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (drop_target_) {
+    RevokeDragDrop(GetHandle());
+    drop_target_->Release();
+    drop_target_ = nullptr;
+  }
+  drop_channel_ = nullptr;
+
   overlay_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
