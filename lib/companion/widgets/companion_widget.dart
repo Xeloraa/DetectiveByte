@@ -92,13 +92,19 @@ class _CompanionWidgetState extends State<CompanionWidget>
         Opacity(
           opacity: state.transparency,
           child: GestureDetector(
-            onTap: widget.controller.onTap,
-            // Byte floats alone (no chrome, no window controls) while
-            // minimized to the overlay — double-tap is the way back to the
-            // full app window.
-            onDoubleTap: widget.reportOverlayHits
+            // Byte floats alone (no chrome, no analysis panels — they're
+            // hidden while minimized) — a tap restores the full window
+            // instead of running the normal investigate flow, since there's
+            // nowhere to show its result while floating anyway. This used
+            // to be a double-tap, but Byte wanders on his own now, and
+            // landing two taps on a moving target in the ~300ms Flutter
+            // allows for double-tap recognition is unreasonably hard for a
+            // real user (and was never reliably reproducible even with
+            // pixel-accurate synthetic clicks) — a single tap is forgiving
+            // enough to actually hit while he's on the move.
+            onTap: widget.reportOverlayHits
                 ? DesktopOverlay.restoreNormalWindow
-                : null,
+                : widget.controller.onTap,
             onPanStart: (_) => widget.controller.onDragStart(),
             onPanUpdate: (details) {
               setState(() {
