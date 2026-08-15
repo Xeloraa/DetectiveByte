@@ -211,7 +211,11 @@ class _OnboardingPage extends StatelessWidget {
           const Spacer(flex: 1),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            // Compact padding + a scaled-down Byte keep the whole page
+            // inside short viewports (the old 230px-tall full-size Byte
+            // plus headings overflowed anything under ~640px tall — the
+            // test harness's default 800x600 surface tripped it every run).
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
             decoration: AppTheme.darkPanel.copyWith(
               borderRadius: BorderRadius.circular(22),
             ),
@@ -235,29 +239,37 @@ class _OnboardingPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                DetectiveByteCharacter(pose: step.pose),
+                const SizedBox(height: 14),
+                SizedBox(
+                  height: 168,
+                  child: Center(
+                    child: Transform.scale(
+                      scale: 0.72,
+                      child: DetectiveByteCharacter(pose: step.pose),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 22),
           Text(
             step.title,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppTheme.ink,
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               height: 1.25,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             step.subtitle,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppTheme.inkSoft,
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               height: 1.4,
             ),

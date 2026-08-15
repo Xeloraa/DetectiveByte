@@ -105,7 +105,7 @@ class SettingsSheet extends StatelessWidget {
                 const SizedBox(height: 14),
                 _SettingRow(
                   label: 'Idle animations',
-                  subtitle: 'Allow Byte to perform idle animations',
+                  subtitle: 'Byte blinks, thinks, and wanders around on his own',
                   value: state.idleAnimationsEnabled,
                   onChanged: controller.setIdleAnimationsEnabled,
                 ),

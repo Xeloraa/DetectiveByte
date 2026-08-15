@@ -26,6 +26,8 @@ class BytePose {
     this.wink = 0.0,
     this.showQuestion = false,
     this.showLightbulb = false,
+    this.walking = false,
+    this.walkPhase = 0.0,
     this.idleActionKind,
   });
 
@@ -46,6 +48,13 @@ class BytePose {
   final bool showQuestion;
   final bool showLightbulb;
 
+  /// Byte is trotting to a new spot ([IdleAction.wander]). There's no
+  /// dedicated walk sprite, so the walk is sold procedurally — a hop bob
+  /// plus a slight sway layered over the idle sprite. Orientation-neutral
+  /// on purpose so it reads correctly whichever way the art faces.
+  final bool walking;
+  final double walkPhase;
+
   /// Which idle action is driving this pose, if any. _poseToAsset() keys
   /// off this directly rather than inferring the pose from continuous
   /// fields like [hatAdjust] or [stretchAmount] — those oscillate through
@@ -60,8 +69,10 @@ class BytePose {
     required double idleProgress,
     required double blinkAmount,
     required InvestigationPhase phase,
+    double walkPhase = 0,
   }) {
-    if (phase == InvestigationPhase.completed) {
+    if (phase == InvestigationPhase.completed ||
+        phase == InvestigationPhase.celebrating) {
       return BytePose(
         scale: 1.05,
         thumbsUp: 1,
@@ -77,6 +88,15 @@ class BytePose {
         magnifierRaise: 1.0,
         headTilt: -0.05,
         blinkAmount: blinkAmount,
+      );
+    }
+
+    if (idleAction == IdleAction.wander) {
+      return BytePose(
+        walking: true,
+        walkPhase: walkPhase,
+        blinkAmount: blinkAmount,
+        idleActionKind: idleAction,
       );
     }
 
@@ -126,6 +146,13 @@ class BytePose {
         ),
       IdleAction.blink => BytePose(blinkAmount: 1.0),
       IdleAction.none => BytePose(blinkAmount: blinkAmount),
+      // Handled by the early return above; kept for exhaustiveness.
+      IdleAction.wander => BytePose(
+          walking: true,
+          walkPhase: walkPhase,
+          blinkAmount: blinkAmount,
+          idleActionKind: idleAction,
+        ),
     };
   }
 
@@ -191,6 +218,9 @@ String _poseToAsset(BytePose pose) {
       return ByteAssets.stretch;
     case IdleAction.polishMagnifyingGlass:
       return ByteAssets.polishGlass;
+    // No dedicated walk sprite — the idle pose plus the procedural hop
+    // reads as a trot while the position itself changes.
+    case IdleAction.wander:
     case IdleAction.blink:
     case IdleAction.none:
     case null:
@@ -238,19 +268,38 @@ class _DetectiveByteCharacterState extends State<DetectiveByteCharacter>
         widget.pose.idleActionKind == null && widget.pose.blinkAmount >= 0.85;
     final displayAsset = isBlinking ? ByteAssets.blink : baseAsset;
 
+    final walking = widget.pose.walking;
+    // |sin| gives one hop per phase cycle with a distinct ground contact,
+    // which reads as a trot far better than a plain sine bob. The sway is
+    // a slower counter-rhythm so the gait doesn't look mechanical.
+    final hopY = walking
+        ? -math.sin(widget.pose.walkPhase).abs() * 5.0
+        : 0.0;
+    final sway = walking
+        ? math.sin(widget.pose.walkPhase * 0.5) * 0.035
+        : 0.0;
+
     return AnimatedBuilder(
       animation: _breathe,
       builder: (context, child) {
         final wave = Curves.easeInOut.transform(_breathe.value);
-        final bobY = -wave * 3.0;
+        final bobY = -wave * 3.0 + hopY;
         final breatheScale = 1.0 + wave * 0.012;
 
+        Widget result = Transform.scale(
+          scale: widget.pose.scale * breatheScale,
+          child: child,
+        );
+        if (walking) {
+          result = Transform.rotate(
+            angle: sway,
+            alignment: Alignment.bottomCenter,
+            child: result,
+          );
+        }
         return Transform.translate(
           offset: Offset(0, bobY),
-          child: Transform.scale(
-            scale: widget.pose.scale * breatheScale,
-            child: child,
-          ),
+          child: result,
         );
       },
       child: SizedBox(

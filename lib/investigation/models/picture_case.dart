@@ -1,5 +1,22 @@
 import 'package:flutter/material.dart';
 
+/// The three honest answers to "is this post telling the truth?".
+///
+/// [inconclusive] is a first-class answer on purpose — teaching kids that
+/// "I don't have enough to say yet" is a legitimate verdict (often the
+/// *right* one) is half the media-literacy point of the app.
+enum CaseVerdict {
+  real,
+  fake,
+  inconclusive;
+
+  String get label => switch (this) {
+        CaseVerdict.real => 'Real',
+        CaseVerdict.fake => 'Fake / Misleading',
+        CaseVerdict.inconclusive => 'Not sure yet',
+      };
+}
+
 /// One "is this real?" picture-judgment case: a viral-style photo + caption,
 /// a couple of clues that surface as the child investigates, and the ground
 /// truth revealed at the end.
@@ -15,7 +32,7 @@ class PictureCase {
     required this.placeholderEmoji,
     required this.placeholderColor,
     required this.zoomOutReveal,
-    required this.isReal,
+    required this.truth,
     required this.clues,
     required this.verdictExplanation,
     required this.lessonLine,
@@ -35,8 +52,9 @@ class PictureCase {
   /// it first appeared).
   final String zoomOutReveal;
 
-  /// Ground truth: does the caption's claim hold up?
-  final bool isReal;
+  /// Ground truth: does the caption's claim hold up, or is there not
+  /// enough evidence either way?
+  final CaseVerdict truth;
 
   /// Question + reveal pairs the child steps through, each followed by a
   /// re-read of the certainty dial.

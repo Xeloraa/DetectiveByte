@@ -40,11 +40,17 @@ class OverlayPanels extends StatelessWidget {
               _MissionCard(
                 progress: state.missionProgress,
                 target: state.missionTarget,
-                onTap: () => PictureCaseDialog.show(
-                  context,
-                  pictureCase: PictureCaseBank.caseForToday(),
-                  onSolved: controller.recordCaseSolved,
-                ),
+                onTap: () async {
+                  // Freeze wandering while the modal owns the stage, and
+                  // let Byte celebrate when the case closes.
+                  controller.onCaseFlowOpened();
+                  await PictureCaseDialog.show(
+                    context,
+                    pictureCase: PictureCaseBank.caseForToday(),
+                    onSolved: controller.recordCaseSolved,
+                  );
+                  controller.onCaseFlowClosed();
+                },
               ),
               const SizedBox(height: 10),
               _JournalCard(casesSolved: state.casesSolved),

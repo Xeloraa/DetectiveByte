@@ -8,6 +8,11 @@ enum IdleAction {
   adjustHat,
   stretch,
   blink,
+
+  /// Byte picks a spot on screen and trots over to it. Position is
+  /// interpolated by the companion controller while the idle scheduler
+  /// drives progress — see CompanionController._onWanderTick.
+  wander,
 }
 
 extension IdleActionX on IdleAction {

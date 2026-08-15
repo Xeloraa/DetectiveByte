@@ -59,6 +59,9 @@ class _CompanionWidgetState extends State<CompanionWidget>
   Widget build(BuildContext context) {
     final state = widget.controller.state;
     final screenSize = MediaQuery.sizeOf(context);
+    // The controller picks wander destinations in pixel space (panel
+    // exclusion, margins), so it needs to know the current window size.
+    widget.controller.updateViewportSize(screenSize);
     final baseOffset = _dragOffset ?? state.position.toOffset(screenSize);
 
     if (!state.isEnabled) {
@@ -79,6 +82,7 @@ class _CompanionWidgetState extends State<CompanionWidget>
       idleProgress: state.idleProgress,
       blinkAmount: state.blinkAmount,
       phase: state.phase,
+      walkPhase: state.walkPhase,
     );
 
     return Positioned(
@@ -95,6 +99,7 @@ class _CompanionWidgetState extends State<CompanionWidget>
             onDoubleTap: widget.reportOverlayHits
                 ? DesktopOverlay.restoreNormalWindow
                 : null,
+            onPanStart: (_) => widget.controller.onDragStart(),
             onPanUpdate: (details) {
               setState(() {
                 final current = _dragOffset ?? baseOffset;
@@ -122,6 +127,7 @@ class _CompanionWidgetState extends State<CompanionWidget>
                 widget.controller.updatePosition(position);
                 setState(() => _dragOffset = null);
               }
+              widget.controller.onDragEnd();
             },
             child: AnimatedBuilder(
               animation: _tapAnim,

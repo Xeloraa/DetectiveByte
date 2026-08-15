@@ -9,7 +9,10 @@ abstract final class AppConstants {
   static const Duration idleMaxDelay = Duration(seconds: 10);
   static const Duration idleActionDuration = Duration(milliseconds: 2400);
   static const Duration analyzeDuration = Duration(milliseconds: 3200);
-  static const Duration missionCompleteHold = Duration(seconds: 3);
+
+  /// How long the case-report card stays up. Longer than it looks — a
+  /// child actually has to read the verdict and the evidence lines.
+  static const Duration missionCompleteHold = Duration(milliseconds: 6500);
 
   static const double tapScale = 1.08;
   static const double defaultPositionX = 0.42;
@@ -30,8 +33,19 @@ abstract final class AppConstants {
   static const String analyzingSpeech = 'Looking for clues…';
   static const String analyzingSpeechNoLink = 'Hmm, no link to check yet…';
   static const String missionCompleteSpeech = 'Mission completed!';
+  static const String caseSolvedSpeech = 'Case closed! Great work, detective!';
+
+  /// Byte's line when the case report shows up — depends on whether a
+  /// video link was actually found to check.
+  static const String verdictFoundSpeech =
+      'I found it! But is the story true?';
+  static const String verdictNoLinkSpeech = 'Hmm… nothing to check yet!';
+
+  /// Shown on the Mission card. The card opens today's picture case, so
+  /// the text has to describe that flow (the old line only mentioned a
+  /// TikTok video and went stale once picture cases shipped).
   static const String todaysMission =
-      'Is this TikTok video showing the full context?';
+      "A viral photo needs a closer look. Tap to open today's case!";
   static const String noLinkHint =
       'Copy a TikTok, YouTube, or Reels link, then tap me to investigate it!';
 

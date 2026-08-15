@@ -51,7 +51,9 @@ void main() {
     expect(find.text('Detective Byte'), findsWidgets);
     expect(find.text("Today's Mission"), findsOneWidget);
     expect(find.text('Cases Solved'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    // Fresh storage starts with zero solved cases (the old assertion
+    // expected '3' from an early build that seeded the counter).
+    expect(find.text('0'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 4));
     controller.dispose();
@@ -72,15 +74,19 @@ void main() {
     );
     await tester.pump();
 
-    // Advance to last page.
+    // Advance to last page. pumpAndSettle can't be used here: Byte's
+    // breathing animation repeats forever by design, so settle the page
+    // transitions (280ms each) with fixed-duration pumps instead.
     for (var i = 0; i < 3; i++) {
       await tester.tap(find.text('Next'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
     }
 
     expect(find.text('Get started'), findsOneWidget);
     await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byType(CompanionScreen), findsOneWidget);
     expect(storage.loadHasSeenOnboarding(), isTrue);

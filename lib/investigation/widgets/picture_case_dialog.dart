@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../companion/models/idle_action.dart';
+import '../../companion/widgets/detective_byte_character.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/desktop_overlay.dart';
 import '../../services/overlay_hit_region.dart';
@@ -88,13 +91,92 @@ class _PictureCaseDialogState extends State<PictureCaseDialog> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: SingleChildScrollView(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: _buildStage(context),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Byte investigates *with* the child — a mini Byte plus a
+              // running commentary, one line per stage, stays pinned above
+              // the stage content instead of Byte being decoration outside
+              // the modal.
+              _ByteCommentary(
+                line: _byteLine,
+                pose: _bytePose,
+                onClose: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(height: 14),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _buildStage(context),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  /// Byte's commentary line for the current stage. Kept non-punitive by
+  /// design: the closed-stage line celebrates a match and reframes a miss
+  /// as learning, never "you got it wrong."
+  String get _byteLine {
+    switch (_controller.stage) {
+      case CaseStage.briefing:
+        return "A new case! Let's look at this post together.";
+      case CaseStage.zoomedOut:
+        return 'Wait… let me get a closer look.';
+      case CaseStage.certainty:
+        return _controller.clueIndex == -1
+            ? 'No wrong answer — how sure do you feel right now?'
+            : 'Did that clue change how sure you are?';
+      case CaseStage.clue:
+        return "Hmm! New evidence. Let's weigh it together.";
+      case CaseStage.verdict:
+        return "You've seen the clues. What's your call, detective?";
+      case CaseStage.closed:
+        if (_controller.verdictWasCorrect) {
+          return _controller.pictureCase.truth == CaseVerdict.inconclusive
+              ? "Sometimes 'not sure yet' is the smartest answer!"
+              : 'Great detective work — your call matched the evidence!';
+        }
+        return 'Good try! Every case teaches us something.';
+    }
+  }
+
+  BytePose get _bytePose {
+    switch (_controller.stage) {
+      case CaseStage.briefing:
+        return const BytePose();
+      case CaseStage.zoomedOut:
+        return const BytePose(
+          scale: AppConstants.tapScale,
+          leanForward: 0.12,
+          magnifierRaise: 1.0,
+          headTilt: -0.05,
+        );
+      case CaseStage.certainty:
+        return const BytePose(
+          thinking: 1,
+          headTilt: -0.06,
+          idleActionKind: IdleAction.thinking,
+        );
+      case CaseStage.clue:
+        return const BytePose(
+          handToBrow: 0.85,
+          headTilt: 0.06,
+          lookDirection: 0.2,
+          idleActionKind: IdleAction.lookAround,
+        );
+      case CaseStage.verdict:
+        return const BytePose();
+      case CaseStage.closed:
+        return _controller.verdictWasCorrect
+            ? const BytePose(scale: 1.05, thumbsUp: 1, wink: 1)
+            : const BytePose(
+                thinking: 1,
+                idleActionKind: IdleAction.thinking,
+              );
+    }
   }
 
   Widget _buildStage(BuildContext context) {
@@ -164,6 +246,75 @@ class _PhotoPlaceholder extends StatelessWidget {
         pictureCase.placeholderEmoji,
         style: const TextStyle(fontSize: 56),
       ),
+    );
+  }
+}
+
+/// Mini Byte + his current commentary line + the dialog close button.
+///
+/// The sprite is the same [DetectiveByteCharacter] scaled down — one more
+/// place where pose assets double as "Byte reacting," so the case flow and
+/// the desktop companion feel like the same character.
+class _ByteCommentary extends StatelessWidget {
+  const _ByteCommentary({
+    required this.line,
+    required this.pose,
+    required this.onClose,
+  });
+
+  final String line;
+  final BytePose pose;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 64,
+          height: 80,
+          child: Center(
+            child: Transform.scale(
+              scale: 0.34,
+              child: DetectiveByteCharacter(pose: pose),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.panelElevated,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Text(
+                line,
+                key: ValueKey<String>(line),
+                style: const TextStyle(
+                  color: AppTheme.panelText,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onClose,
+          icon: const Icon(Icons.close_rounded, size: 18),
+          color: AppTheme.panelMuted,
+          tooltip: 'Close case (progress is lost)',
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+      ],
     );
   }
 }
@@ -393,8 +544,11 @@ class _ClueReveal extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          "Here's what that tells us — worth weighing in, not a final "
-          'answer on its own.',
+          clue.isStrongSignal
+              ? "That's a strong clue — worth leaning on, but still not "
+                  'a final answer on its own.'
+              : "That's just a hint — too thin to build a verdict on by "
+                  'itself.',
           style: TextStyle(
             color: AppTheme.panelMuted.withValues(alpha: 0.8),
             fontSize: 12,
@@ -414,7 +568,7 @@ class _ClueReveal extends StatelessWidget {
 class _Verdict extends StatelessWidget {
   const _Verdict({super.key, required this.onSubmit});
 
-  final ValueChanged<bool> onSubmit;
+  final ValueChanged<CaseVerdict> onSubmit;
 
   @override
   Widget build(BuildContext context) {
@@ -436,43 +590,63 @@ class _Verdict extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton(
-                onPressed: () => onSubmit(true),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.accentGreen,
-                  side: const BorderSide(color: AppTheme.accentGreen),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'True',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
+              child: _VerdictButton(
+                label: 'True',
+                color: AppTheme.accentGreen,
+                onPressed: () => onSubmit(CaseVerdict.real),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: OutlinedButton(
-                onPressed: () => onSubmit(false),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFE8756B),
-                  side: const BorderSide(color: Color(0xFFE8756B)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Fake / Misleading',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
+              child: _VerdictButton(
+                label: 'Fake / Misleading',
+                color: const Color(0xFFE8756B),
+                onPressed: () => onSubmit(CaseVerdict.fake),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        _VerdictButton(
+          label: 'Not sure yet — need more evidence',
+          color: AppTheme.amber,
+          onPressed: () => onSubmit(CaseVerdict.inconclusive),
+        ),
       ],
+    );
+  }
+}
+
+class _VerdictButton extends StatelessWidget {
+  const _VerdictButton({
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
     );
   }
 }
@@ -492,25 +666,56 @@ class _CaseClosed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final correct = controller.verdictWasCorrect;
+    final truth = pictureCase.truth;
+    final verdictStyle = _VerdictStyle.of(truth);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Icon(
-              correct ? Icons.check_circle_rounded : Icons.info_rounded,
-              color: correct ? AppTheme.accentGreen : AppTheme.amber,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _StageHeading(
-                pictureCase.isReal ? 'This one checked out' : 'Case closed',
+        // The at-a-glance answer: color-coded banner so real / fake /
+        // inconclusive is unmistakable before any reading starts.
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: verdictStyle.color.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: verdictStyle.color.withValues(alpha: 0.7)),
+          ),
+          child: Row(
+            children: [
+              Icon(verdictStyle.icon, color: verdictStyle.color, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      verdictStyle.banner,
+                      style: TextStyle(
+                        color: verdictStyle.color,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      correct
+                          ? 'Your call matched the evidence.'
+                          : 'Your call was different this time — that’s okay.',
+                      style: TextStyle(
+                        color: verdictStyle.color.withValues(alpha: 0.85),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Text(
           pictureCase.verdictExplanation,
           style: const TextStyle(
@@ -519,7 +724,28 @@ class _CaseClosed extends StatelessWidget {
             height: 1.45,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+        const Text(
+          'The evidence, recapped',
+          style: TextStyle(
+            color: AppTheme.panelMuted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _EvidenceRecapRow(
+          label: 'Look closer',
+          text: pictureCase.zoomOutReveal,
+          strong: null, // an observation, not a signal either way
+        ),
+        for (final clue in pictureCase.clues)
+          _EvidenceRecapRow(
+            label: clue.question,
+            text: clue.reveal,
+            strong: clue.isStrongSignal,
+          ),
+        const SizedBox(height: 14),
         const Text(
           'Your certainty line',
           style: TextStyle(
@@ -530,7 +756,7 @@ class _CaseClosed extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         _ConfidenceLine(values: controller.certaintyHistory),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -558,6 +784,112 @@ class _CaseClosed extends StatelessWidget {
         const SizedBox(height: 18),
         _PrimaryButton(label: 'Back to case files', onPressed: onDone),
       ],
+    );
+  }
+}
+
+/// Color/icon/wording for each of the three verdicts, in one place so the
+/// banner, and any future surface showing a verdict, can't drift apart.
+class _VerdictStyle {
+  const _VerdictStyle._(this.color, this.icon, this.banner);
+
+  final Color color;
+  final IconData icon;
+  final String banner;
+
+  static _VerdictStyle of(CaseVerdict verdict) => switch (verdict) {
+        CaseVerdict.real => const _VerdictStyle._(
+            AppTheme.accentGreen,
+            Icons.verified_rounded,
+            'Checks out — REAL',
+          ),
+        CaseVerdict.fake => const _VerdictStyle._(
+            Color(0xFFE8756B),
+            Icons.report_gmailerrorred_rounded,
+            'FAKE / MISLEADING',
+          ),
+        CaseVerdict.inconclusive => const _VerdictStyle._(
+            AppTheme.amber,
+            Icons.help_rounded,
+            'INCONCLUSIVE — not enough evidence yet',
+          ),
+      };
+}
+
+/// One row of the case-closed evidence recap: what was checked, what it
+/// showed, and whether that signal is actually reliable ("Strong clue"
+/// vs "Just a hint") — the "here's what that tells us" framing.
+class _EvidenceRecapRow extends StatelessWidget {
+  const _EvidenceRecapRow({
+    required this.label,
+    required this.text,
+    required this.strong,
+  });
+
+  final String label;
+  final String text;
+
+  /// null = not a reliability signal at all (e.g. the look-closer
+  /// observation), true/false = strong clue vs weak hint.
+  final bool? strong;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.panelElevated,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppTheme.panelText,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (strong != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (strong! ? AppTheme.accentGreen : AppTheme.amber)
+                        .withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    strong! ? 'Strong clue' : 'Just a hint',
+                    style: TextStyle(
+                      color: strong! ? AppTheme.accentGreen : AppTheme.amber,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              color: AppTheme.panelMuted,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -8,7 +8,25 @@ import '../models/idle_action.dart';
 
 /// Schedules quiet, non-attention-seeking idle detective animations.
 class IdleAnimationController {
-  IdleAnimationController({required this.onTick});
+  IdleAnimationController({
+    required this.onTick,
+    List<IdleAction>? actionPool,
+  }) : _actionPool = actionPool ?? _defaultPool;
+
+  /// Actions the scheduler draws from (weighted — wander appears twice so
+  /// moving around, the strongest "living pet" signal, comes up often).
+  /// Injectable so tests can force a specific action.
+  static const List<IdleAction> _defaultPool = [
+    IdleAction.lookAround,
+    IdleAction.readNotebook,
+    IdleAction.thinking,
+    IdleAction.polishMagnifyingGlass,
+    IdleAction.adjustHat,
+    IdleAction.wander,
+    IdleAction.wander,
+  ];
+
+  final List<IdleAction> _actionPool;
 
   final VoidCallback onTick;
   final Random _random = Random();
@@ -113,25 +131,20 @@ class IdleAnimationController {
   void _startAction() {
     if (_disposed || !_enabled || _paused) return;
 
-    // Prefer the three showcase idles from the product mockup.
-    const showcase = [
-      IdleAction.lookAround,
-      IdleAction.readNotebook,
-      IdleAction.thinking,
-      IdleAction.polishMagnifyingGlass,
-      IdleAction.adjustHat,
-    ];
-    _currentAction = showcase[_random.nextInt(showcase.length)];
+    _currentAction = _actionPool[_random.nextInt(_actionPool.length)];
     _progress = 0;
     onTick();
 
-    const tickMs = 50;
+    // Wander ticks at ~60fps because the companion controller maps each
+    // progress tick straight to Byte's on-screen position — 50ms ticks
+    // (20fps) made the walk visibly stutter. Poses stay at 50ms.
+    final tickMs = _currentAction == IdleAction.wander ? 16 : 50;
     final totalTicks =
-        AppConstants.idleActionDuration.inMilliseconds ~/ tickMs;
+        _durationFor(_currentAction).inMilliseconds ~/ tickMs;
     var tick = 0;
 
     _actionTimer?.cancel();
-    _actionTimer = Timer.periodic(const Duration(milliseconds: tickMs), (t) {
+    _actionTimer = Timer.periodic(Duration(milliseconds: tickMs), (t) {
       if (_disposed) {
         t.cancel();
         return;
@@ -148,5 +161,14 @@ class IdleAnimationController {
         _scheduleNext();
       }
     });
+  }
+
+  /// How long one run of [action] lasts. Wanders vary so Byte doesn't
+  /// march at a fixed cadence.
+  Duration _durationFor(IdleAction action) {
+    if (action == IdleAction.wander) {
+      return Duration(milliseconds: 2800 + _random.nextInt(1800));
+    }
+    return AppConstants.idleActionDuration;
   }
 }

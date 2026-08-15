@@ -39,8 +39,12 @@ class InvestigationOverlay extends StatelessWidget {
                 author: state.videoAuthor,
                 thumbnailUrl: state.videoThumbnailUrl,
               )
-            : const _MissionCompleteCard(
-                key: ValueKey('complete'),
+            : _CaseReportCard(
+                key: const ValueKey('complete'),
+                foundVideo: state.videoPlatform != null,
+                platform: state.videoPlatform,
+                title: state.videoTitle,
+                author: state.videoAuthor,
               );
 
         return SafeArea(
@@ -222,7 +226,8 @@ class _AnalyzeCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            _hasVideo ? 'Analyzing the video…' : AppConstants.analyzingSpeechNoLink,
+            _stepLabel,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppTheme.panelText,
               fontSize: 13,
@@ -253,53 +258,218 @@ class _AnalyzeCard extends StatelessWidget {
       ),
     );
   }
+
+  /// Narrates what Byte is doing as the bar fills, so analyzing reads as
+  /// a real check with steps — not a silent progress bar.
+  String get _stepLabel {
+    if (_hasVideo) {
+      if (progress < 0.35) return 'Checking who posted it…';
+      if (progress < 0.7) return 'Reading the title and details…';
+      return 'Comparing it with the claim…';
+    }
+    if (progress < 0.5) return 'Looking for a link to check…';
+    return 'No link found — that tells us something too!';
+  }
 }
 
-class _MissionCompleteCard extends StatelessWidget {
-  const _MissionCompleteCard({super.key});
+/// Byte's case report — the verdict (found / can't tell yet) plus the
+/// evidence for it, so a child sees *why*, not just that the mission ended.
+///
+/// Framing matters here: finding the real video is evidence about the
+/// *video*, never proof of the *story* around it — the card says exactly
+/// that, which is the app's core media-literacy lesson.
+class _CaseReportCard extends StatelessWidget {
+  const _CaseReportCard({
+    super.key,
+    required this.foundVideo,
+    this.platform,
+    this.title,
+    this.author,
+  });
+
+  final bool foundVideo;
+  final String? platform;
+  final String? title;
+  final String? author;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 220,
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+      width: 250,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: AppTheme.darkPanel.copyWith(
         borderRadius: BorderRadius.circular(22),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: AppTheme.accentGreen.withValues(alpha: 0.18),
-              shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.accentGreen, width: 2),
-            ),
-            child: const Icon(
-              Icons.verified_rounded,
-              color: AppTheme.accentGreen,
-              size: 30,
-            ),
+          Row(
+            children: [
+              Icon(
+                Icons.folder_special_rounded,
+                color: AppTheme.amber,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Case Report',
+                style: TextStyle(
+                  color: AppTheme.panelText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                foundVideo ? Icons.verified_rounded : Icons.help_rounded,
+                color: foundVideo ? AppTheme.accentGreen : AppTheme.amber,
+                size: 18,
+              ),
+            ],
           ),
+          const SizedBox(height: 10),
+          _VerdictPill(foundVideo: foundVideo),
           const SizedBox(height: 12),
-          const Text(
-            'Mission Completed!',
-            style: TextStyle(
-              color: AppTheme.panelText,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
+          if (foundVideo) ...[
+            _EvidenceLine(
+              icon: Icons.check_circle_rounded,
+              color: AppTheme.accentGreen,
+              text: 'It really exists on $platform.',
             ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Great detective work — keep questioning what you see.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
+            if (author != null && author!.isNotEmpty)
+              _EvidenceLine(
+                icon: Icons.check_circle_rounded,
+                color: AppTheme.accentGreen,
+                text: 'Posted by “$author”.',
+              ),
+            if (title != null && title!.isNotEmpty)
+              _EvidenceLine(
+                icon: Icons.play_circle_outline_rounded,
+                color: AppTheme.panelMuted,
+                text: '“${_ellipsize(title!, 60)}”',
+              ),
+            _EvidenceLine(
+              icon: Icons.help_rounded,
+              color: AppTheme.amber,
+              text: 'When and why it was posted — still unknown.',
+            ),
+            _EvidenceLine(
+              icon: Icons.priority_high_rounded,
+              color: const Color(0xFFE8756B),
+              text: 'A real video doesn’t prove the caption is true.',
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Next: check the date, the account, and who else is '
+              'reporting it.',
+              style: TextStyle(
+                color: AppTheme.panelMuted.withValues(alpha: 0.9),
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                height: 1.35,
+              ),
+            ),
+          ] else ...[
+            _EvidenceLine(
+              icon: Icons.link_off_rounded,
               color: AppTheme.panelMuted,
-              fontSize: 12,
-              height: 1.35,
+              text: 'No video link found to check.',
+            ),
+            _EvidenceLine(
+              icon: Icons.looks_one_rounded,
+              color: AppTheme.accentGreen,
+              text: 'Copy a TikTok, YouTube, or Reels link.',
+            ),
+            _EvidenceLine(
+              icon: Icons.looks_two_rounded,
+              color: AppTheme.accentGreen,
+              text: 'Tap Byte to investigate it together.',
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'No link, no check — that’s an “inconclusive,” not a yes.',
+              style: TextStyle(
+                color: AppTheme.panelMuted.withValues(alpha: 0.9),
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _ellipsize(String text, int max) {
+    if (text.length <= max) return text;
+    return '${text.substring(0, max - 1)}…';
+  }
+}
+
+/// The one-word answer at a glance, color-coded: green = verified,
+/// amber = can't tell yet. Deliberately no "fake" pill in the video flow
+/// — Byte can only confirm what oEmbed proves, never declare a video fake.
+class _VerdictPill extends StatelessWidget {
+  const _VerdictPill({required this.foundVideo});
+
+  final bool foundVideo;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = foundVideo ? AppTheme.accentGreen : AppTheme.amber;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.7)),
+      ),
+      child: Text(
+        foundVideo
+            ? 'FOUND — but is the story true?'
+            : 'CAN’T TELL YET — no link to check',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+class _EvidenceLine extends StatelessWidget {
+  const _EvidenceLine({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppTheme.panelText,
+                fontSize: 12,
+                height: 1.3,
+              ),
             ),
           ),
         ],

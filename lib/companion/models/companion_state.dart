@@ -21,6 +21,7 @@ class CompanionState {
     required this.missionTarget,
     required this.phase,
     required this.analyzeProgress,
+    this.walkPhase = 0,
     this.videoPlatform,
     this.videoTitle,
     this.videoAuthor,
@@ -42,6 +43,11 @@ class CompanionState {
   final int missionTarget;
   final InvestigationPhase phase;
   final double analyzeProgress;
+
+  /// Monotonically advancing phase (radians-ish) while Byte is walking
+  /// during a [IdleAction.wander]; 0 when standing still. Drives the
+  /// hop/sway walk cycle in the character widget.
+  final double walkPhase;
 
   /// Set when the last investigation found a real TikTok/YouTube/Reels link
   /// (e.g. on the clipboard) — null when investigating with no link found.
@@ -87,6 +93,7 @@ class CompanionState {
     int? missionTarget,
     InvestigationPhase? phase,
     double? analyzeProgress,
+    double? walkPhase,
     String? videoPlatform,
     String? videoTitle,
     String? videoAuthor,
@@ -110,6 +117,7 @@ class CompanionState {
       missionTarget: missionTarget ?? this.missionTarget,
       phase: phase ?? this.phase,
       analyzeProgress: analyzeProgress ?? this.analyzeProgress,
+      walkPhase: walkPhase ?? this.walkPhase,
       videoPlatform: clearVideo ? null : (videoPlatform ?? this.videoPlatform),
       videoTitle: clearVideo ? null : (videoTitle ?? this.videoTitle),
       videoAuthor: clearVideo ? null : (videoAuthor ?? this.videoAuthor),

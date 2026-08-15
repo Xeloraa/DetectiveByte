@@ -50,7 +50,7 @@ class PictureCaseController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool? verdictIsReal;
+  CaseVerdict? verdict;
 
   bool get isLastClue => _clueIndex >= pictureCase.clues.length - 1;
 
@@ -82,11 +82,11 @@ class PictureCaseController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void submitVerdict(bool guessedReal) {
-    verdictIsReal = guessedReal;
+  void submitVerdict(CaseVerdict guess) {
+    verdict = guess;
     _stage = CaseStage.closed;
     notifyListeners();
   }
 
-  bool get verdictWasCorrect => verdictIsReal == pictureCase.isReal;
+  bool get verdictWasCorrect => verdict == pictureCase.truth;
 }

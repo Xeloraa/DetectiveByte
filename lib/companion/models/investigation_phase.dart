@@ -4,4 +4,9 @@ enum InvestigationPhase {
   greeting,
   analyzing,
   completed,
+
+  /// Short celebrate beat after closing a picture case — same pose as
+  /// [completed] but deliberately distinct so the investigation overlay
+  /// (which only renders for analyzing/completed) stays hidden.
+  celebrating,
 }

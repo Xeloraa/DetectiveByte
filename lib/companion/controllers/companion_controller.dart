@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' show Offset, Rect, Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show Clipboard;
@@ -17,11 +18,19 @@ import '../models/investigation_phase.dart';
 
 /// Central state for Detective Byte — companion + mission layer.
 class CompanionController extends ChangeNotifier {
-  CompanionController({required this._storage}) {
+  CompanionController({
+    required this._storage,
+    List<IdleAction>? idleActionPool,
+  }) {
+    _idleActionPool = idleActionPool;
     _bootstrap();
   }
 
   final LocalStorageService _storage;
+
+  /// Test seam: forces the idle scheduler to draw from a specific action
+  /// pool (e.g. wander-only) instead of the weighted production mix.
+  List<IdleAction>? _idleActionPool;
 
   void _bootstrap() {
     _state = CompanionState.initial().copyWith(
@@ -36,7 +45,10 @@ class CompanionController extends ChangeNotifier {
       phase: InvestigationPhase.greeting,
     );
 
-    _idleController = IdleAnimationController(onTick: _onIdleTick);
+    _idleController = IdleAnimationController(
+      onTick: _onIdleTick,
+      actionPool: _idleActionPool,
+    );
     if (_state.idleAnimationsEnabled && _state.isEnabled) {
       _idleController.start();
     }
@@ -61,7 +73,37 @@ class CompanionController extends ChangeNotifier {
 
   CompanionState get state => _state;
 
+  // -- Wander bookkeeping ---------------------------------------------------
+  // Byte's walk is driven by the idle scheduler (which advances progress
+  // 0..1 at ~60fps during IdleAction.wander); this controller maps that
+  // progress onto a position path. All in normalized CompanionPosition
+  // space so window resizes mid-walk stay sane.
+
+  /// Window size reported by CompanionWidget — needed to pick walk targets
+  /// in pixel space (panel exclusion zone, margins) before normalizing.
+  Size? _viewportSize;
+
+  CompanionPosition? _wanderStart;
+  CompanionPosition? _wanderTarget;
+  double _walkPhase = 0;
+
+  void updateViewportSize(Size size) {
+    if (_viewportSize == size) return;
+    _viewportSize = size;
+  }
+
   void _onIdleTick() {
+    final action = _idleController.currentAction;
+
+    if (action == IdleAction.wander) {
+      if (_state.phase == InvestigationPhase.idle) _onWanderTick();
+      return;
+    }
+
+    // The walk ended (finished, paused, or cancelled by a tap/drag) —
+    // commit wherever Byte got to before anything else touches state.
+    if (_wanderTarget != null) _endWander();
+
     if (_state.phase != InvestigationPhase.idle) return;
     _state = _state.copyWith(
       currentIdleAction: _idleController.currentAction,
@@ -71,6 +113,125 @@ class CompanionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _onWanderTick() {
+    final progress = _idleController.progress;
+    if (_wanderTarget == null) {
+      _beginWander();
+    }
+    final start = _wanderStart;
+    final target = _wanderTarget;
+    if (start == null || target == null) return;
+
+    final t = _easeInOut(progress);
+    final moving = (target.x - start.x).abs() > 0.0001 ||
+        (target.y - start.y).abs() > 0.0001;
+    // Only run the hop cycle when Byte is actually going somewhere — a
+    // stationary "decided to stay put" wander must not bounce in place.
+    if (moving) _walkPhase += 0.34; // ~3.3 hops/sec at the 16ms tick rate
+    _state = _state.copyWith(
+      position: CompanionPosition(
+        x: start.x + (target.x - start.x) * t,
+        y: start.y + (target.y - start.y) * t,
+      ),
+      currentIdleAction: IdleAction.wander,
+      idleProgress: progress,
+      blinkAmount: _idleController.blinkAmount,
+      walkPhase: _walkPhase,
+    );
+    notifyListeners();
+
+    if (progress >= 1) _endWander();
+  }
+
+  void _beginWander() {
+    _wanderStart = _state.position;
+    _walkPhase = 0;
+
+    final viewport = _viewportSize;
+    if (viewport == null) {
+      // No viewport reported yet — stand still and "decide" instead.
+      _wanderTarget = _state.position;
+      return;
+    }
+
+    final here = _state.position.toOffset(viewport);
+    final targetPx = _pickWanderTarget(viewport, here);
+    _wanderTarget = targetPx == null
+        ? _state.position // Nowhere good to go — pause in place.
+        : CompanionPosition.fromOffset(targetPx, viewport);
+  }
+
+  /// Random destination that keeps Byte fully on-screen, out from under
+  /// the top-right Status/Mission/Journal stack, and low enough that a
+  /// speech bubble above his head still fits in the window. Returns null
+  /// if no suitable spot turned up after a few tries.
+  Offset? _pickWanderTarget(Size viewport, Offset here) {
+    const margin = 8.0;
+    final minX = margin;
+    final maxX = viewport.width - AppConstants.companionWidth - margin;
+    final minY = AppConstants.companionHeight * 0.45; // bubble headroom
+    final maxY = viewport.height - AppConstants.companionHeight - margin;
+    if (maxX <= minX || maxY <= minY) return null;
+
+    final panelZone = Rect.fromLTWH(viewport.width - 300, 0, 300, 400);
+
+    for (var attempt = 0; attempt < 16; attempt++) {
+      final candidate = Offset(
+        minX + _random.nextDouble() * (maxX - minX),
+        minY + _random.nextDouble() * (maxY - minY),
+      );
+      final byteRect = Rect.fromLTWH(
+        candidate.dx,
+        candidate.dy,
+        AppConstants.companionWidth,
+        AppConstants.companionHeight,
+      );
+      if (panelZone.overlaps(byteRect)) continue;
+      // Short shuffles read as jitter — only walk if it's worth it.
+      if ((candidate - here).distance < 140) continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  /// Idempotent — the scheduler's completion tick and an explicit cancel
+  /// (tap, drag, disable) can both arrive for the same walk.
+  void _endWander() {
+    if (_wanderTarget == null) return;
+    final where = _state.position;
+    _wanderStart = null;
+    _wanderTarget = null;
+    if (_state.walkPhase != 0) {
+      _state = _state.copyWith(walkPhase: 0);
+      notifyListeners();
+    }
+    // Byte remembers where he stopped, even mid-walk interruptions.
+    unawaited(_storage.savePosition(where));
+  }
+
+  static double _easeInOut(double t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    return t * t * (3 - 2 * t);
+  }
+
+  // -- Drag coordination ----------------------------------------------------
+
+  /// The user grabbed Byte — freeze autonomous movement so he doesn't
+  /// wander out from under the pointer mid-drag.
+  void onDragStart() {
+    if (!_state.isEnabled) return;
+    _idleController.pause();
+  }
+
+  void onDragEnd() {
+    if (_state.isEnabled &&
+        _state.idleAnimationsEnabled &&
+        _state.phase == InvestigationPhase.idle) {
+      _idleController.resume();
+    }
+  }
+
   Future<void> updatePosition(CompanionPosition position) async {
     _state = _state.copyWith(position: position);
     notifyListeners();
@@ -78,8 +239,12 @@ class CompanionController extends ChangeNotifier {
   }
 
   Future<void> resetPosition() async {
+    // Freeze any walk in flight so it can't tug Byte away from the reset
+    // spot the moment he's placed there (same coordination as a drag).
+    onDragStart();
     final defaultPos = CompanionPosition.defaultPosition();
     await updatePosition(defaultPos);
+    onDragEnd();
   }
 
   Future<void> setEnabled(bool enabled) async {
@@ -253,9 +418,9 @@ class CompanionController extends ChangeNotifier {
   }
 
   /// Records a picture-judgment case as solved — same counters the video
-  /// investigation flow feeds ("Today's Mission" / "Cases Solved"), but
-  /// without touching phase/speech, since the case dialog has its own
-  /// self-contained verdict/celebration screen.
+  /// investigation flow feeds ("Today's Mission" / "Cases Solved") — and
+  /// gives Byte a short celebrate beat so he's visibly part of the win,
+  /// not just a counter update happening off-screen.
   Future<void> recordCaseSolved() async {
     final alreadyDone = _state.missionComplete;
     final newProgress = alreadyDone
@@ -271,6 +436,53 @@ class CompanionController extends ChangeNotifier {
 
     await _storage.saveMissionProgress(newProgress);
     await _storage.saveCasesSolved(newCases);
+
+    // Only celebrate when nothing else owns the stage — stomping an
+    // in-flight video analysis would swap its phase out from under it.
+    if (_state.phase == InvestigationPhase.idle) {
+      _celebrateCaseSolved();
+    }
+  }
+
+  void _celebrateCaseSolved() {
+    _speechTimer?.cancel();
+    _idleController.pause();
+
+    _state = _state.copyWith(
+      phase: InvestigationPhase.celebrating,
+      speechText: AppConstants.caseSolvedSpeech,
+      isTapped: true,
+      currentIdleAction: IdleAction.none,
+    );
+    notifyListeners();
+
+    _speechTimer = Timer(AppConstants.speechDuration, () {
+      _state = _state.copyWith(
+        phase: InvestigationPhase.idle,
+        clearSpeech: true,
+        isTapped: false,
+      );
+      notifyListeners();
+      if (_state.idleAnimationsEnabled && _state.isEnabled) {
+        _idleController.resume();
+      }
+    });
+  }
+
+  /// The case dialog is modal and covers the stage — freeze wandering so
+  /// Byte doesn't stroll around behind it (and so his hit region doesn't
+  /// drift while the child is clicking through clues).
+  void onCaseFlowOpened() {
+    if (!_state.isEnabled) return;
+    _idleController.pause();
+  }
+
+  void onCaseFlowClosed() {
+    if (!_state.isEnabled) return;
+    if (_state.idleAnimationsEnabled &&
+        _state.phase == InvestigationPhase.idle) {
+      _idleController.resume();
+    }
   }
 
   Future<void> _completeMission() async {
@@ -281,9 +493,15 @@ class CompanionController extends ChangeNotifier {
     final newCases =
         alreadyDone ? _state.casesSolved : _state.casesSolved + 1;
 
+    // The closing line matches the case report: "found it" when a real
+    // link was checked, "nothing to check" when no link turned up.
+    final foundVideo = _state.videoPlatform != null;
+
     _state = _state.copyWith(
       phase: InvestigationPhase.completed,
-      speechText: AppConstants.missionCompleteSpeech,
+      speechText: foundVideo
+          ? AppConstants.verdictFoundSpeech
+          : AppConstants.verdictNoLinkSpeech,
       isTapped: true,
       missionProgress: newProgress,
       casesSolved: newCases,

@@ -341,6 +341,55 @@ Other loose ends on this feature:
    issues) and `flutter test` (compare failures against the 3 known
    pre-existing ones - if a 4th appears, you broke something).
 
+## Session addendum — 2026-08-15 (OpenCode / claude-fable-5)
+
+Polish session on top of commit `76ebb68`. All changes below are tested:
+`flutter analyze` = 0 issues, `flutter test` = 7/7 pass (the 3 pre-existing
+onboarding failures are FIXED — see below).
+
+**What changed:**
+- **Autonomous wandering** (`IdleAction.wander`): Byte now picks a spot and
+  trots over to it (~2/7 of idle actions, 2.8–4.6s, eased path at ~60fps —
+  the idle scheduler ticks at 16ms during walks only). Walk visuals are
+  procedural (hop + sway over the idle sprite; no walk sprite exists and no
+  directional flip — sprite facing couldn't be verified). Targets exclude
+  the top-right panel stack and leave speech-bubble headroom; position is
+  persisted on walk end AND on mid-walk interruption. Drag pauses wandering
+  (`onDragStart`/`onDragEnd`); `updateViewportSize` is fed by
+  `companion_widget.dart`. Test seam: `idleActionPool` ctor param.
+- **Video flow verdict**: `_MissionCompleteCard` → `_CaseReportCard` in
+  `investigation_overlay.dart` — verdict pill (FOUND / CAN'T TELL YET) +
+  evidence lines. Byte never declares a video fake (oEmbed can't prove
+  that); the framing is "real video ≠ true story". `missionCompleteHold`
+  bumped 3s → 6.5s so it's readable; analyze card now narrates steps.
+- **Picture flow 3-state verdict**: `CaseVerdict` enum (real/fake/
+  inconclusive) replaced `bool isReal` in `PictureCase`; verdict buttons
+  gained "Not sure yet"; `_CaseClosed` got a color-coded verdict banner +
+  evidence recap with "Strong clue"/"Just a hint" chips. 4th case
+  (`purple-bridge`) is deliberately inconclusive.
+- **Byte participates in the case dialog**: `_ByteCommentary` (mini Byte +
+  per-stage line + close button) pinned inside the dialog. `recordCaseSolved`
+  now triggers a celebrate beat (`InvestigationPhase.celebrating` — new enum
+  value; deliberately NOT rendered by `InvestigationOverlay`). Wander freezes
+  while the dialog is open (`onCaseFlowOpened/Closed`).
+- **Onboarding overflow FIXED** (`onboarding_screen.dart`): Byte scaled to
+  0.72 + tighter spacing → fits 600px viewports; also fixed two stale test
+  assertions in `widget_test.dart` ('3' → '0' cases; pumpAndSettle → fixed
+  pumps, because the breathe animation never settles).
+- Loose ends closed: `AppConstants.todaysMission` reworded for picture
+  cases; settings idle subtitle updated.
+- New tests: `test/companion_life_test.dart` (wander + persistence, drag
+  freeze/resume, full end-to-end picture case click-through — the flow the
+  previous session never fully click-tested).
+
+**Still true from the original handoff:** everything under "Things you must
+NOT break" is untouched (minimize, speech-bubble Stack, blink swap, error
+nets, no state-mgmt deps, `--overlay` flag). The user shared an image with a
+design idea this session that couldn't be read (no image-input support) —
+if it resurfaces, ask them to describe it in text. Visual (on-screen)
+verification of the new animations still hasn't happened in this
+environment; ask the user to watch Byte for a minute and click one case.
+
 ## Suggested next steps, roughly in priority order
 
 1. Get the user (or yourself, carefully) to click through one full picture

@@ -25,7 +25,7 @@ abstract final class PictureCaseBank {
       zoomOutReveal:
           'Looking closer, the crop was hiding something: string lights, a '
           'stage, and a food truck at the edge of the frame.',
-      isReal: false,
+      truth: CaseVerdict.fake,
       clues: [
         CaseClue(
           question: 'Who posted this?',
@@ -60,7 +60,7 @@ abstract final class PictureCaseBank {
       zoomOutReveal:
           'Zooming out, there\'s a school banner in the background and a '
           'stack of labeled trash bags lined up for counting.',
-      isReal: true,
+      truth: CaseVerdict.real,
       clues: [
         CaseClue(
           question: 'Who posted this?',
@@ -94,7 +94,7 @@ abstract final class PictureCaseBank {
       zoomOutReveal:
           'Looking closer, the "shadow" lines up exactly with a boat mast '
           'just out of frame, stretched long by the low sun.',
-      isReal: false,
+      truth: CaseVerdict.fake,
       clues: [
         CaseClue(
           question: 'Is the lighting and shadow consistent?',
@@ -117,6 +117,47 @@ abstract final class PictureCaseBank {
       lessonLine:
           'The spookier or more amazing a photo looks, the more it\'s '
           'worth a second check before believing it.',
+    ),
+    // Deliberately inconclusive: no red flags, but no corroboration either.
+    // Teaches that "not enough evidence yet" is a real verdict — absence
+    // of proof isn't proof of fake, and picking a side anyway is the trap.
+    PictureCase(
+      id: 'purple-bridge',
+      caption:
+          '"The old bridge downtown glowed PURPLE last night!! No one '
+          'knows why 😲💜"',
+      placeholderEmoji: '🌉',
+      placeholderColor: Color(0xFF7B68C8),
+      zoomOutReveal:
+          'Looking closer, the colors blend smoothly and there\'s no '
+          'obvious edit mark — but one photo can\'t show how the light '
+          'got there.',
+      truth: CaseVerdict.inconclusive,
+      clues: [
+        CaseClue(
+          question: 'Who posted this?',
+          reveal:
+              'A local account that posts town photos every week — legit '
+              'history, but this is their first post about anything like '
+              'this.',
+          isStrongSignal: false,
+        ),
+        CaseClue(
+          question: 'Is anyone else reporting it?',
+          reveal:
+              'No other posts or news yet — but it happened late at night, '
+              'so maybe people just haven\'t posted. Absence of posts '
+              'isn\'t proof either way.',
+          isStrongSignal: false,
+        ),
+      ],
+      verdictExplanation:
+          'Nothing says it\'s edited — but nothing confirms it happened '
+          'either. With only this one photo, the story can\'t be proved '
+          'in any direction. Detectives call that inconclusive.',
+      lessonLine:
+          '"Not sure yet" is a smart, honest answer. You don\'t have to '
+          'pick a side before the evidence is there.',
     ),
   ];
 }
