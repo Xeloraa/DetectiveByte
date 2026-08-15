@@ -4,6 +4,16 @@ Written 2026-08-15 for whichever agent picks this project up next (originally
 handed from Claude Code to OpenCode). Read this before touching anything —
 several things in here look like they'd be easy one-line fixes and are not.
 
+**Update (same day, later):** since this was first written, OpenCode added
+Byte wandering on his own during idle time (persists where he stops, freezes
+on drag), expanded picture-case verdicts to three states (real/fake/
+inconclusive), fixed the onboarding overflow bug mentioned below, and added
+`test/companion_life_test.dart` with real end-to-end coverage. Separately,
+**the minimize section below is now out of date in one important way**:
+Byte-floats-on-minimize was re-implemented and this time actually verified
+working end-to-end (not just by code review) — see the note inside that
+section before assuming it's still broken.
+
 ## What this project is
 
 **Detective Byte** is a Windows desktop app (Flutter) built for a UNESCO
@@ -151,7 +161,21 @@ reacts live if chrome ever changes after startup, not just at launch. This
 machinery is intact and working - it's just currently only exercised by
 the dev-only `--overlay` flag, not by anything a real user does.
 
-### The minimize saga - DO NOT re-attempt custom minimize-to-overlay without reading this
+### The minimize saga - resolved, but read this before touching minimize again
+
+**Status as of commit `b1d6bc2`: working, and this time actually verified,
+not just code-reviewed.** Minimize floats Byte (transparent, no background,
+no panels) and he keeps wandering the screen; a single tap on him restores
+the full window. Verified by: triggering all three minimize paths
+(title-bar-equivalent, taskbar-click-equivalent, and both fired back-to-back
+to force the old race) and confirming none leave the window stuck iconic;
+then locating Byte on screen by scanning for his sprite's orange color,
+single-clicking him for real, and confirming via the window's actual
+`WS_EX_LAYERED` style bit (not just "looks right in a screenshot") that it
+switched back to normal chrome, followed by a screenshot of the restored
+full window. The history below is kept for context on *why* it's built the
+way it is — the lessons are still load-bearing even though the feature
+works now.
 
 Earlier this session, minimize was wired to intercept `WM_SYSCOMMAND`/
 `SC_MINIMIZE` and switch to overlay chrome instead of actually minimizing,
@@ -178,18 +202,29 @@ taskbar. This went through **five** rounds of bugs:
    verified - screen automation in this dev environment is unreliable, see
    below). At this point minimize was **reverted entirely** to plain OS
    default behavior (commit `c6a8ac8`). Zero custom code in the minimize
-   path now.
+   path.
+6. Minimize was re-wired back on (commit `b1d6bc2`), reusing the exact
+   native logic from step 4 unchanged (it was never the problem). Then Byte
+   gained the ability to wander on his own (a separate, unrelated change),
+   which made the *real* problem obvious: double-tapping a constantly-moving
+   target is unreasonably hard, for a real user and for synthetic clicks
+   alike - confirmed by aiming pixel-accurate synthetic double-clicks
+   straight at him and still not triggering it. Fixed by changing the
+   restore gesture from double-tap to a single tap
+   (`companion_widget.dart`: `onTap` goes to `DesktopOverlay.restoreNormalWindow`
+   instead of the investigate flow whenever `reportOverlayHits` is true,
+   i.e. while floating) - much more forgiving to land on a moving target,
+   and there's nowhere to show the investigate flow's result while floating
+   anyway (analysis panels are hidden in that mode).
 
-**If asked to bring back "Byte floats when minimized"**: the
-`SwitchToOverlayChrome`/`SwitchToNormalChrome` machinery is still there and
-works. What's missing is a *reliable* way back to the normal window - the
-double-tap-on-Byte gesture is wired
-(`companion_widget.dart`'s `onDoubleTap: DesktopOverlay.restoreNormalWindow`)
-but was never confirmed working by a real click (only by direct message
-injection, which isn't the same code path as Flutter's gesture arena). If
-you re-attempt this, get the user to physically test double-tap and the
-taskbar-icon-click path before declaring it done - don't trust automated
-screenshots alone here (see "Dev environment quirks").
+**If this breaks again**: `SwitchToOverlayChrome()`/`SwitchToNormalChrome()`
+in `win32_window.cpp` are the chrome-switch primitives and have been stable
+since step 4 above - the fragile part has consistently been the *restore*
+path, not the minimize-into-overlay path. Verify restore with a real
+synthetic click against Byte's actual on-screen position (his sprite color
+is a reliable way to locate him - see git history around `b1d6bc2` for the
+PowerShell approach), and confirm via `GetWindowLong`'s `WS_EX_LAYERED` bit,
+not just a screenshot.
 
 ## Fixed bugs this session (context in case symptoms resurface)
 
@@ -315,9 +350,12 @@ Other loose ends on this feature:
 
 ## Things you must NOT break
 
-1. **Don't re-add custom minimize interception** without getting a real,
-   user-confirmed working restore-path first (see "The minimize saga").
-   The current plain-OS-behavior state is deliberately simple and known-good.
+1. **Don't change the minimize/restore gesture without re-verifying with a
+   real synthetic click**, not just a screenshot or code review (see "The
+   minimize saga") - this exact feature broke silently multiple times
+   because it looked right on screen while not actually working. In
+   particular, don't revert the restore gesture back to double-tap now that
+   Byte wanders - that's the specific thing that was proven unreliable.
 2. **Don't move the speech bubble back into flow layout above Byte** - the
    `Stack`/`Positioned` structure in `companion_widget.dart` is load-bearing
    for the shake fix. If refactoring that widget, keep Byte's position
@@ -392,16 +430,17 @@ environment; ask the user to watch Byte for a minute and click one case.
 
 ## Suggested next steps, roughly in priority order
 
-1. Get the user (or yourself, carefully) to click through one full picture
-   case end-to-end and confirm the certainty dial / clue / verdict /
-   closed screens all look and behave right.
-2. Fix the pre-existing onboarding `RenderFlex` overflow
-   (`onboarding_screen.dart:209`) - cheap win, also unblocks the 3 failing
-   tests.
-3. Decide what to do about `AppConstants.todaysMission`'s stale text now
-   that the Mission card opens two different flow types.
-4. If real image assets become available, wire them into `PictureCase` /
+Done since this doc was first written: picture-case end-to-end verified
+(now covered by `test/companion_life_test.dart`), onboarding overflow
+fixed, `todaysMission` text situation still open (see below), and
+floating-Byte-on-minimize is done and verified.
+
+1. Decide what to do about `AppConstants.todaysMission`'s stale text
+   ("Is this TikTok video showing the full context?") now that the Mission
+   card opens two different flow types (video and picture case).
+2. If real image assets become available, wire them into `PictureCase` /
    `_PhotoPlaceholder`.
-5. More picture cases - 3 is thin for daily replay.
-6. Only if explicitly asked: revisit floating-Byte-on-minimize, with a
-   real (not simulated) restore-path verification before calling it done.
+3. More picture cases - 3 is thin for daily replay.
+4. Consider whether the wander behavior should be tuned/disabled while the
+   window is in *normal* (non-floating) chrome too, or if it's meant to be
+   overlay-only - wasn't specified either way when this was written.
