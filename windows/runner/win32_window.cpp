@@ -431,6 +431,18 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_ACTIVATE:
+      // While floating, the window is click-through everywhere except
+      // directly over Byte (point_is_in_hit_region_) — so if it's becoming
+      // active *without* the cursor over him, that activation could only
+      // have come from something external (the taskbar icon, alt-tab),
+      // never from a click on our own content, since clicks anywhere else
+      // pass straight through and are never delivered to this window at
+      // all. Restore on exactly that case — never on a direct click on
+      // Byte, which stays a plain tap (reaction animation), not a restore.
+      if (overlay_mode_ && LOWORD(wparam) != WA_INACTIVE &&
+          !point_is_in_hit_region_) {
+        SwitchToNormalChrome();
+      }
       if (child_content_ != nullptr) {
         SetFocus(child_content_);
       }

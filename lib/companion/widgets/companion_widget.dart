@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../services/desktop_overlay.dart';
 import '../../services/overlay_hit_region.dart';
 import '../controllers/companion_controller.dart';
 import '../models/companion_position.dart';
@@ -92,19 +91,14 @@ class _CompanionWidgetState extends State<CompanionWidget>
         Opacity(
           opacity: state.transparency,
           child: GestureDetector(
-            // Byte floats alone (no chrome, no analysis panels — they're
-            // hidden while minimized) — a tap restores the full window
-            // instead of running the normal investigate flow, since there's
-            // nowhere to show its result while floating anyway. This used
-            // to be a double-tap, but Byte wanders on his own now, and
-            // landing two taps on a moving target in the ~300ms Flutter
-            // allows for double-tap recognition is unreasonably hard for a
-            // real user (and was never reliably reproducible even with
-            // pixel-accurate synthetic clicks) — a single tap is forgiving
-            // enough to actually hit while he's on the move.
-            onTap: widget.reportOverlayHits
-                ? DesktopOverlay.restoreNormalWindow
-                : widget.controller.onTap,
+            // A tap always gives Byte's normal reaction animation, whether
+            // floating or not — restoring the full window on tap made
+            // casually poking at him while he wanders annoying, since every
+            // tap yanked the whole app back. Restoring is handled natively
+            // instead (see WM_ACTIVATE in win32_window.cpp): clicking the
+            // taskbar icon brings the full window back without needing a
+            // dedicated gesture here.
+            onTap: widget.controller.onTap,
             onPanStart: (_) => widget.controller.onDragStart(),
             onPanUpdate: (details) {
               setState(() {
