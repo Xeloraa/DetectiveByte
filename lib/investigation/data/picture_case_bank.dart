@@ -16,7 +16,14 @@ import '../models/picture_case.dart';
 abstract final class PictureCaseBank {
   /// Deterministic "today's case" — same case all day if reopened, cycles
   /// day to day, no network/random-seed dependency.
+  ///
+  /// TEMPORARILY PINNED to the volcanic-lightning case (the one with a real
+  /// bundled photo) for hackathon demo recording — the day-rotation below
+  /// would otherwise have landed on the fictional no-photo case today.
+  /// Restore the rotation (delete the early return) once recording's done.
   static PictureCase caseForToday() {
+    return cases.firstWhere((c) => c.id == 'volcanic-lightning');
+    // ignore: dead_code
     final dayOfYear = DateTime.now()
         .difference(DateTime(DateTime.now().year))
         .inDays;
