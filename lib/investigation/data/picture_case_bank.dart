@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../models/picture_case.dart';
 
-/// Small bundled set of picture-judgment cases. Fictional/generic scenarios
-/// on purpose — the mechanic (learning to check sourcing, timing, and
-/// corroboration before trusting a caption) matters more than any specific
-/// real-world image, and avoids ever needing to state a real claim is fake.
+/// Small bundled set of picture-judgment cases.
+///
+/// Three are grounded in real, extremely well-documented "fooled the whole
+/// internet" moments — chosen because their ground truth is settled and
+/// widely reported by fact-checkers and news organizations (not because
+/// they're "trending now"; this bank has no live data source, on purpose —
+/// a hackathon demo shouldn't depend on a network call or a live scrape of
+/// real people's images working on stage). The fourth stays fictional: it
+/// teaches "not enough evidence yet," which only works if the case is
+/// deliberately unresolved, and inventing a fake unresolved real-world
+/// story would be dishonest in a way a fictional one isn't.
 abstract final class PictureCaseBank {
   /// Deterministic "today's case" — same case all day if reopened, cycles
   /// day to day, no network/random-seed dependency.
@@ -17,106 +24,126 @@ abstract final class PictureCaseBank {
   }
 
   static const List<PictureCase> cases = [
+    // Real event: an AI-generated image of Pope Francis in a white puffer
+    // coat (March 2023) spread worldwide and fooled huge numbers of people
+    // before it was traced to an AI-art account. One of the most widely
+    // cited "AI fooled the internet" case studies in media-literacy
+    // education — chosen for exactly that reason.
     PictureCase(
-      id: 'crowd-protest',
-      caption: '"MASSIVE protest happening downtown RIGHT NOW!! 😱"',
-      placeholderEmoji: '👥',
-      placeholderColor: Color(0xFF5B8DEF),
+      id: 'ai-pope-jacket',
+      caption:
+          '"Pope Francis just stepped out in the DRIPPIEST white puffer '
+          'coat ever 🔥🧥"',
+      placeholderEmoji: '🧥',
+      placeholderColor: Color(0xFFE8E0D0),
       zoomOutReveal:
-          'Looking closer, the crop was hiding something: string lights, a '
-          'stage, and a food truck at the edge of the frame.',
+          'Looking closer, the hand holding his coffee cup blurs strangely '
+          'into the fingers, and his crucifix chain doesn\'t quite connect '
+          'to anything.',
       truth: CaseVerdict.fake,
       clues: [
         CaseClue(
-          question: 'Who posted this?',
+          question: 'Who posted this first?',
           reveal:
-              'An account with no other posts, made this week — no history '
-              'of ever being downtown before.',
+              'An account that only ever shares AI-art experiments — not a '
+              'single real news photo anywhere in its history.',
           isStrongSignal: true,
         ),
         CaseClue(
-          question: 'When was this photo actually taken?',
+          question: 'Did any real news outlet confirm it?',
           reveal:
-              'The same photo shows up in a search from over a year ago — '
-              'it\'s from a summer concert, not today.',
+              'None. No wire service, no photographer credit, no official '
+              'account — just people resharing it, over and over.',
           isStrongSignal: true,
         ),
       ],
       verdictExplanation:
-          'The photo is real — it\'s just from the wrong day, the wrong '
-          'event, and re-posted with a caption that has nothing to do with '
-          'it.',
+          'This photo never existed — it was made by an AI image tool and '
+          'looked convincing enough to fool millions of people, including '
+          'some who really should have checked first.',
       lessonLine:
-          'A real photo can still tell a fake story if it\'s dropped into '
-          'the wrong caption.',
+          'This is one of the most famous "AI fooled the whole internet" '
+          'moments ever — a photo "looking right" isn\'t the same as it '
+          'being real.',
     ),
+    // Real event: an AI-generated image of an explosion near a government
+    // building (May 2023) spread on social media and briefly moved real
+    // stock markets before it was debunked within the hour.
     PictureCase(
-      id: 'park-cleanup',
+      id: 'ai-explosion',
       caption:
-          '"Our class picked up 40 bags of trash at Riverbend Park this '
-          'Saturday!"',
-      placeholderEmoji: '🧹',
-      placeholderColor: Color(0xFF4CAF6A),
+          '"BREAKING: huge explosion just rocked a government building 💥"',
+      placeholderEmoji: '💥',
+      placeholderColor: Color(0xFFE8756B),
       zoomOutReveal:
-          'Zooming out, there\'s a school banner in the background and a '
-          'stack of labeled trash bags lined up for counting.',
+          'Looking closer, the fence in front of the building bends in a '
+          'way real metal doesn\'t, and the smoke plume casts no shadow at '
+          'all.',
+      truth: CaseVerdict.fake,
+      clues: [
+        CaseClue(
+          question: 'Did any verified news account confirm it?',
+          reveal:
+              'No — every major outlet checked and found nothing. Local '
+              'emergency services reported no such incident.',
+          isStrongSignal: true,
+        ),
+        CaseClue(
+          question: 'Where did it first appear?',
+          reveal:
+              'An account with a fake "verified" badge, created only weeks '
+              'earlier — not a real journalist or news organization.',
+          isStrongSignal: true,
+        ),
+      ],
+      verdictExplanation:
+          'This image was AI-generated. It spread so fast that it briefly '
+          'moved real financial markets before anyone could confirm it —  '
+          'nothing like it ever happened.',
+      lessonLine:
+          'A fake image doesn\'t need to fool everyone forever — it only '
+          'needs a few minutes to cause real damage before the truth '
+          'catches up.',
+    ),
+    // Real event: "volcanic lightning" (a "dirty thunderstorm") is a
+    // genuine, documented phenomenon, captured independently by multiple
+    // photographers during real eruptions. The "real" counterweight to the
+    // two AI cases above — not everything dramatic-looking is fake.
+    PictureCase(
+      id: 'volcanic-lightning',
+      caption:
+          '"Insane photo: lightning bolts shooting out of an erupting '
+          'volcano ⚡🌋"',
+      placeholderEmoji: '⚡',
+      placeholderColor: Color(0xFF6B4A9C),
+      zoomOutReveal:
+          'Looking closer, the ash cloud has real turbulence and texture — '
+          'nothing about the lightning looks pasted on top.',
       truth: CaseVerdict.real,
       clues: [
         CaseClue(
-          question: 'Who posted this?',
+          question: 'Is there a real explanation for this?',
           reveal:
-              'The school\'s own account, which regularly posts about class '
-              'projects with real names and dates.',
+              'Yes — scientists call it a "dirty thunderstorm." Volcanic ash '
+              'particles rub together and build up static electricity, the '
+              'same way storm clouds do.',
           isStrongSignal: true,
         ),
         CaseClue(
-          question: 'Is anyone else reporting it?',
+          question: 'Did other photographers capture it too?',
           reveal:
-              'The local park department shared the same event with extra '
-              'photos from a different angle.',
+              'Several photographers at different angles caught the same '
+              'eruption that night, with matching timestamps.',
           isStrongSignal: true,
         ),
       ],
       verdictExplanation:
-          'This one checks out — a known source, matching details from a '
-          'second independent source, nothing hidden by the crop.',
+          'This one\'s real — volcanic lightning is a genuine, if rare, '
+          'natural phenomenon, and independent photos from that night back '
+          'each other up.',
       lessonLine:
-          'Ordinary-looking posts deserve the same quick check as '
-          'wild ones — this time, it held up.',
-    ),
-    PictureCase(
-      id: 'giant-shadow',
-      caption:
-          '"Scientists baffled by giant shadow spotted over the lake at '
-          'sunset 👀"',
-      placeholderEmoji: '🌫️',
-      placeholderColor: Color(0xFF9C6ADE),
-      zoomOutReveal:
-          'Looking closer, the "shadow" lines up exactly with a boat mast '
-          'just out of frame, stretched long by the low sun.',
-      truth: CaseVerdict.fake,
-      clues: [
-        CaseClue(
-          question: 'Is the lighting and shadow consistent?',
-          reveal:
-              'The shadow bends in a direction the sunset angle can\'t '
-              'actually produce — a sign of an edited-in shape.',
-          isStrongSignal: true,
-        ),
-        CaseClue(
-          question: 'Is anyone else reporting it?',
-          reveal:
-              'No news, park ranger, or weather account near the lake '
-              'mentions anything unusual that day.',
-          isStrongSignal: true,
-        ),
-      ],
-      verdictExplanation:
-          'The "mystery" has a simple, boring explanation — ordinary boat, '
-          'long shadow, dramatic caption.',
-      lessonLine:
-          'The spookier or more amazing a photo looks, the more it\'s '
-          'worth a second check before believing it.',
+          'Sometimes the wildest-looking photo is the true one — that\'s '
+          'exactly why it\'s worth checking instead of guessing.',
     ),
     // Deliberately inconclusive: no red flags, but no corroboration either.
     // Teaches that "not enough evidence yet" is a real verdict — absence
