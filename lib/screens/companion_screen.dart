@@ -58,7 +58,10 @@ class _CompanionScreenState extends State<CompanionScreen> {
 
   Future<void> _handleDrop(DropDoneDetails details) async {
     setState(() => _dragHovering = false);
-    if (details.files.isEmpty) return;
+    if (details.files.isEmpty) {
+      await _showDropFailedDialog();
+      return;
+    }
 
     Uint8List? bytes;
     try {
