@@ -163,19 +163,29 @@ the dev-only `--overlay` flag, not by anything a real user does.
 
 ### The minimize saga - resolved, but read this before touching minimize again
 
-**Status as of commit `b1d6bc2`: working, and this time actually verified,
+**Status as of commit `8b830d1`: working, and this time actually verified,
 not just code-reviewed.** Minimize floats Byte (transparent, no background,
-no panels) and he keeps wandering the screen; a single tap on him restores
-the full window. Verified by: triggering all three minimize paths
+no panels) and he keeps wandering the screen. Tapping him directly always
+gives his normal reaction animation — it never restores anything, even
+while floating (a brief detour through "single tap restores" made casually
+poking at him annoying, since every tap yanked the whole app back — see
+step 7 below). Restoring the full window is done by clicking the taskbar
+icon: `WM_ACTIVATE` in `win32_window.cpp` restores whenever the window
+becomes active *while the cursor isn't over Byte*
+(`!point_is_in_hit_region_`) — since the floating window is click-through
+everywhere except directly over him, an activation with the cursor
+elsewhere could only be external (taskbar, alt-tab), never a click on our
+own content, so this cleanly distinguishes the two without any timing
+heuristics. Verified by: triggering all three minimize paths
 (title-bar-equivalent, taskbar-click-equivalent, and both fired back-to-back
 to force the old race) and confirming none leave the window stuck iconic;
-then locating Byte on screen by scanning for his sprite's orange color,
-single-clicking him for real, and confirming via the window's actual
-`WS_EX_LAYERED` style bit (not just "looks right in a screenshot") that it
-switched back to normal chrome, followed by a screenshot of the restored
-full window. The history below is kept for context on *why* it's built the
-way it is — the lessons are still load-bearing even though the feature
-works now.
+locating Byte by his sprite's orange color and clicking him directly,
+confirming the window stays floating (`WS_EX_LAYERED` unchanged); then
+simulating an external activation with the cursor away from him and
+confirming via the same style bit that it switched back to normal chrome,
+followed by a screenshot of the restored full window. The history below is
+kept for context on *why* it's built the way it is — the lessons are still
+load-bearing even though the feature works now.
 
 Earlier this session, minimize was wired to intercept `WM_SYSCOMMAND`/
 `SC_MINIMIZE` and switch to overlay chrome instead of actually minimizing,
@@ -210,21 +220,25 @@ taskbar. This went through **five** rounds of bugs:
    target is unreasonably hard, for a real user and for synthetic clicks
    alike - confirmed by aiming pixel-accurate synthetic double-clicks
    straight at him and still not triggering it. Fixed by changing the
-   restore gesture from double-tap to a single tap
-   (`companion_widget.dart`: `onTap` goes to `DesktopOverlay.restoreNormalWindow`
-   instead of the investigate flow whenever `reportOverlayHits` is true,
-   i.e. while floating) - much more forgiving to land on a moving target,
-   and there's nowhere to show the investigate flow's result while floating
-   anyway (analysis panels are hidden in that mode).
+   restore gesture from double-tap to a single tap on Byte.
+7. Single-tap-restores turned out to have its own problem: it made every
+   casual tap on Byte (while floating) yank the full window back instead of
+   just showing his reaction animation - annoying, not what "poke the pet"
+   should feel like. Moved the restore trigger off of Byte entirely and
+   onto `WM_ACTIVATE` (see above) - clicking the taskbar icon restores,
+   clicking Byte never does (commit `8b830d1`).
 
 **If this breaks again**: `SwitchToOverlayChrome()`/`SwitchToNormalChrome()`
 in `win32_window.cpp` are the chrome-switch primitives and have been stable
 since step 4 above - the fragile part has consistently been the *restore*
-path, not the minimize-into-overlay path. Verify restore with a real
-synthetic click against Byte's actual on-screen position (his sprite color
-is a reliable way to locate him - see git history around `b1d6bc2` for the
-PowerShell approach), and confirm via `GetWindowLong`'s `WS_EX_LAYERED` bit,
-not just a screenshot.
+trigger, not the minimize-into-overlay path. Verify with two real synthetic
+interactions, not one: click Byte directly (locate him by his sprite's
+orange color - see git history around `b1d6bc2`/`8b830d1` for the
+PowerShell approach) and confirm the window does NOT restore
+(`WS_EX_LAYERED` stays set); separately, simulate external activation with
+the cursor away from him (`SendInput` a harmless key, then
+`SetForegroundWindow`) and confirm it DOES restore. Checking only one
+direction is how this broke before.
 
 ## Fixed bugs this session (context in case symptoms resurface)
 
@@ -350,12 +364,17 @@ Other loose ends on this feature:
 
 ## Things you must NOT break
 
-1. **Don't change the minimize/restore gesture without re-verifying with a
-   real synthetic click**, not just a screenshot or code review (see "The
-   minimize saga") - this exact feature broke silently multiple times
-   because it looked right on screen while not actually working. In
-   particular, don't revert the restore gesture back to double-tap now that
-   Byte wanders - that's the specific thing that was proven unreliable.
+1. **Don't change the minimize/restore trigger without re-verifying with
+   real synthetic interactions in both directions** (click Byte -> must
+   NOT restore; external activation -> must restore), not just a
+   screenshot or code review (see "The minimize saga") - this exact
+   feature broke silently multiple times because it looked right on screen
+   while not actually working. Specifically: don't put the restore trigger
+   back on tapping Byte (single- or double-tap) - that was tried twice and
+   both times made him either impossible to reliably tap (wandering target)
+   or annoying to casually poke (every tap yanked the app back). The
+   current `WM_ACTIVATE` + `!point_is_in_hit_region_` approach in
+   `win32_window.cpp` is what to build on if this needs to change again.
 2. **Don't move the speech bubble back into flow layout above Byte** - the
    `Stack`/`Positioned` structure in `companion_widget.dart` is load-bearing
    for the shake fix. If refactoring that widget, keep Byte's position
