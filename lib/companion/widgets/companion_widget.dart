@@ -161,7 +161,10 @@ class _CompanionWidgetState extends State<CompanionWidget>
                         bottom: 0,
                         child: Transform.scale(
                           scale: 1.0 + tapPop * 0.06,
-                          child: DetectiveByteCharacter(pose: pose),
+                          child: DetectiveByteCharacter(
+                            pose: pose,
+                            breathingEnabled: state.idleAnimationsEnabled,
+                          ),
                         ),
                       ),
                     ],

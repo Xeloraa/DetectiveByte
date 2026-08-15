@@ -237,9 +237,20 @@ class DetectiveByteCharacter extends StatefulWidget {
   const DetectiveByteCharacter({
     super.key,
     required this.pose,
+    this.breathingEnabled = true,
   });
 
   final BytePose pose;
+
+  /// The breathing bob used to run unconditionally, independent of the
+  /// "idle animations" setting — meaning turning that setting off still
+  /// left a continuous 2.8s-cycle repaint running forever, which defeats
+  /// the point of the toggle as an actual "stop animating" control (e.g.
+  /// for screen-recording on a machine where continuous rendering is
+  /// triggering an unrelated graphics-driver crash). Defaults to true so
+  /// every other call site (the case-dialog mini portrait, onboarding)
+  /// keeps its previous always-breathing behavior.
+  final bool breathingEnabled;
 
   @override
   State<DetectiveByteCharacter> createState() =>
@@ -251,7 +262,26 @@ class _DetectiveByteCharacterState extends State<DetectiveByteCharacter>
   late final AnimationController _breathe = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2800),
-  )..repeat(reverse: true);
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.breathingEnabled) {
+      _breathe.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DetectiveByteCharacter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.breathingEnabled == oldWidget.breathingEnabled) return;
+    if (widget.breathingEnabled) {
+      _breathe.repeat(reverse: true);
+    } else {
+      _breathe.stop();
+    }
+  }
 
   @override
   void dispose() {

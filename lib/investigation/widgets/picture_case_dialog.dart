@@ -44,6 +44,11 @@ class PictureCaseDialog extends StatefulWidget {
     if (!context.mounted) return;
     await showDialog<void>(
       context: context,
+      // A stray tap/activation elsewhere on screen (e.g. invoking a
+      // screen-capture tool over the app) shouldn't silently discard a
+      // case in progress — the explicit close button in _ByteCommentary
+      // is the only intentional way out now.
+      barrierDismissible: false,
       barrierColor: DesktopOverlay.isOverlayMode
           ? Colors.black45
           : Colors.black54,
