@@ -161,12 +161,17 @@ class _ByteHeader extends StatelessWidget {
           child: Center(
             child: Transform.scale(
               scale: 0.3,
+              // Same reasoning as picture_case_dialog.dart's _ByteHeader:
+              // a small supporting portrait doesn't need a perpetual
+              // breathing repaint loop running for the dialog's whole
+              // lifetime.
               child: const DetectiveByteCharacter(
                 pose: BytePose(
                   thinking: 1,
                   headTilt: -0.06,
                   idleActionKind: IdleAction.thinking,
                 ),
+                breathingEnabled: false,
               ),
             ),
           ),

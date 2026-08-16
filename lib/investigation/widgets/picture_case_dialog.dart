@@ -303,7 +303,12 @@ class _ByteCommentary extends StatelessWidget {
           child: Center(
             child: Transform.scale(
               scale: 0.34,
-              child: DetectiveByteCharacter(pose: pose),
+              // A small supporting portrait, on screen for this entire
+              // dialog's lifetime — breathing here (a perpetual repaint
+              // loop, unrelated to the main "idle animations" setting)
+              // isn't worth the continuous render cost for something this
+              // secondary. The main desktop Byte still breathes.
+              child: DetectiveByteCharacter(pose: pose, breathingEnabled: false),
             ),
           ),
         ),
