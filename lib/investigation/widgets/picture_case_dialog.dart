@@ -199,8 +199,7 @@ class _PictureCaseDialogState extends State<PictureCaseDialog> {
         return _CertaintyDial(
           key: ValueKey('certainty-${_controller.clueIndex}'),
           isFirstRead: _controller.clueIndex == -1,
-          value: _controller.pendingCertainty,
-          onChanged: (v) => _controller.pendingCertainty = v,
+          initialValue: _controller.pendingCertainty,
           onLockIn: _controller.lockInCertainty,
         );
       case CaseStage.clue:
@@ -464,19 +463,30 @@ class _ZoomedOut extends StatelessWidget {
   }
 }
 
-class _CertaintyDial extends StatelessWidget {
+class _CertaintyDial extends StatefulWidget {
   const _CertaintyDial({
     super.key,
     required this.isFirstRead,
-    required this.value,
-    required this.onChanged,
+    required this.initialValue,
     required this.onLockIn,
   });
 
   final bool isFirstRead;
-  final double value;
-  final ValueChanged<double> onChanged;
-  final VoidCallback onLockIn;
+  final double initialValue;
+  final ValueChanged<double> onLockIn;
+
+  @override
+  State<_CertaintyDial> createState() => _CertaintyDialState();
+}
+
+class _CertaintyDialState extends State<_CertaintyDial> {
+  // Lives here, not in PictureCaseController: dragging used to route every
+  // pixel of movement through the controller's notifyListeners(), which
+  // rebuilt the *entire* dialog — Byte's mini portrait and its own
+  // perpetual breathing animation included — on every single drag frame.
+  // Scoping the live value to just this widget means a drag only rebuilds
+  // this small subtree.
+  late double _value = widget.initialValue;
 
   @override
   Widget build(BuildContext context) {
@@ -485,7 +495,7 @@ class _CertaintyDial extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _StageHeading(
-          isFirstRead ? 'How sure are you?' : 'Now how sure are you?',
+          widget.isFirstRead ? 'How sure are you?' : 'Now how sure are you?',
         ),
         const SizedBox(height: 8),
         const Text(
@@ -498,7 +508,7 @@ class _CertaintyDial extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          '${value.round()}% sure',
+          '${_value.round()}% sure',
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: AppTheme.accentGreen,
@@ -507,14 +517,17 @@ class _CertaintyDial extends StatelessWidget {
           ),
         ),
         Slider(
-          value: value,
+          value: _value,
           min: 0,
           max: 100,
           divisions: 20,
-          onChanged: onChanged,
+          onChanged: (v) => setState(() => _value = v),
         ),
         const SizedBox(height: 10),
-        _PrimaryButton(label: 'Lock it in', onPressed: onLockIn),
+        _PrimaryButton(
+          label: 'Lock it in',
+          onPressed: () => widget.onLockIn(_value),
+        ),
       ],
     );
   }

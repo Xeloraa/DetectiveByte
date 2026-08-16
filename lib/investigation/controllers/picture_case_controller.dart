@@ -43,12 +43,17 @@ class PictureCaseController extends ChangeNotifier {
   /// "first read" before any clue, then one after each clue.
   final List<double> certaintyHistory = [];
 
+  /// Seed value for the next certainty read (50 for a first read, or the
+  /// last locked-in value for a re-read) — read once when [_CertaintyDial]
+  /// mounts. The live drag value while the slider is moving lives entirely
+  /// in that widget's own local state, not here: routing every drag pixel
+  /// through this controller's notifyListeners() used to force a rebuild
+  /// of the *whole* dialog — including Byte's mini portrait and its own
+  /// perpetual breathing animation — on every single frame of the drag,
+  /// which is exactly the kind of avoidable per-frame churn that showed up
+  /// as visible lag when screen-recording this stage.
   double _pendingCertainty = 50;
   double get pendingCertainty => _pendingCertainty;
-  set pendingCertainty(double value) {
-    _pendingCertainty = value;
-    notifyListeners();
-  }
 
   CaseVerdict? verdict;
 
@@ -65,8 +70,12 @@ class PictureCaseController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void lockInCertainty() {
-    certaintyHistory.add(_pendingCertainty);
+  /// [value] is the slider's final position when "Lock it in" was pressed,
+  /// reported directly by the widget rather than read back from this
+  /// controller (see [_pendingCertainty]'s doc comment).
+  void lockInCertainty(double value) {
+    _pendingCertainty = value;
+    certaintyHistory.add(value);
     if (_clueIndex + 1 < pictureCase.clues.length) {
       _clueIndex++;
       _stage = CaseStage.clue;
